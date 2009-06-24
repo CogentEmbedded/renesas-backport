@@ -400,9 +400,9 @@ static void sci_transmit_chars(struct uart_port *port)
 	if (!(status & SCxSR_TDxE(port))) {
 		ctrl = sci_in(port, SCSCR);
 		if (uart_circ_empty(xmit))
-			ctrl &= ~SCI_CTRL_FLAGS_TIE;
+			ctrl &= ~SCSCR_TIE;
 		else
-			ctrl |= SCI_CTRL_FLAGS_TIE;
+			ctrl |= SCSCR_TIE;
 		sci_out(port, SCSCR, ctrl);
 		return;
 	}
@@ -444,7 +444,7 @@ static void sci_transmit_chars(struct uart_port *port)
 			sci_out(port, SCxSR, SCxSR_TDxE_CLEAR(port));
 		}
 
-		ctrl |= SCI_CTRL_FLAGS_TIE;
+		ctrl |= SCSCR_TIE;
 		sci_out(port, SCSCR, ctrl);
 	}
 }
@@ -693,7 +693,7 @@ static irqreturn_t sci_rx_interrupt(int irq, void *ptr)
 			disable_irq_nosync(irq);
 			scr |= 0x4000;
 		} else {
-			scr &= ~SCI_CTRL_FLAGS_RIE;
+			scr &= ~SCSCR_RIE;
 		}
 		sci_out(port, SCSCR, scr);
 		/* Clear current interrupt */
@@ -771,10 +771,10 @@ static irqreturn_t sci_mpxed_interrupt(int irq, void *ptr)
 
 	ssr_status = sci_in(port, SCxSR);
 	scr_status = sci_in(port, SCSCR);
-	err_enabled = scr_status & (SCI_CTRL_FLAGS_REIE | SCI_CTRL_FLAGS_RIE);
+	err_enabled = scr_status & (SCSCR_REIE | SCSCR_RIE);
 
 	/* Tx Interrupt */
-	if ((ssr_status & SCxSR_TDxE(port)) && (scr_status & SCI_CTRL_FLAGS_TIE) &&
+	if ((ssr_status & SCxSR_TDxE(port)) && (scr_status & SCSCR_TIE) &&
 	    !s->chan_tx)
 		ret = sci_tx_interrupt(irq, ptr);
 	/*
@@ -782,7 +782,7 @@ static irqreturn_t sci_mpxed_interrupt(int irq, void *ptr)
 	 * DR flags
 	 */
 	if (((ssr_status & SCxSR_RDxF(port)) || s->chan_rx) &&
-	    (scr_status & SCI_CTRL_FLAGS_RIE))
+	    (scr_status & SCSCR_RIE))
 		ret = sci_rx_interrupt(irq, ptr);
 	/* Error Interrupt */
 	if ((ssr_status & SCxSR_ERRORS(port)) && err_enabled)
@@ -936,7 +936,7 @@ static void sci_dma_tx_complete(void *arg)
 		schedule_work(&s->work_tx);
 	} else if (port->type == PORT_SCIFA) {
 		u16 ctrl = sci_in(port, SCSCR);
-		sci_out(port, SCSCR, ctrl & ~SCI_CTRL_FLAGS_TIE);
+		sci_out(port, SCSCR, ctrl & ~SCSCR_TIE);
 	}
 
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -1206,7 +1206,7 @@ static void sci_start_tx(struct uart_port *port)
 	if (!s->chan_tx || port->type == PORT_SCIFA) {
 		/* Set TIE (Transmit Interrupt Enable) bit in SCSCR */
 		ctrl = sci_in(port, SCSCR);
-		sci_out(port, SCSCR, ctrl | SCI_CTRL_FLAGS_TIE);
+		sci_out(port, SCSCR, ctrl | SCSCR_TIE);
 	}
 }
 
@@ -1218,13 +1218,13 @@ static void sci_stop_tx(struct uart_port *port)
 	ctrl = sci_in(port, SCSCR);
 	if (port->type == PORT_SCIFA)
 		ctrl &= ~0x8000;
-	ctrl &= ~SCI_CTRL_FLAGS_TIE;
+	ctrl &= ~SCSCR_TIE;
 	sci_out(port, SCSCR, ctrl);
 }
 
 static void sci_start_rx(struct uart_port *port)
 {
-	unsigned short ctrl = SCI_CTRL_FLAGS_RIE | SCI_CTRL_FLAGS_REIE;
+	unsigned short ctrl = SCSCR_RIE | SCSCR_REIE;
 
 	/* Set RIE (Receive Interrupt Enable) bit in SCSCR */
 	ctrl |= sci_in(port, SCSCR);
@@ -1241,7 +1241,7 @@ static void sci_stop_rx(struct uart_port *port)
 	ctrl = sci_in(port, SCSCR);
 	if (port->type == PORT_SCIFA)
 		ctrl &= ~0x4000;
-	ctrl &= ~(SCI_CTRL_FLAGS_RIE | SCI_CTRL_FLAGS_REIE);
+	ctrl &= ~(SCSCR_RIE | SCSCR_REIE);
 	sci_out(port, SCSCR, ctrl);
 }
 
@@ -1281,7 +1281,7 @@ static void rx_timer_fn(unsigned long arg)
 		scr &= ~0x4000;
 		enable_irq(s->irqs[1]);
 	}
-	sci_out(port, SCSCR, scr | SCI_CTRL_FLAGS_RIE);
+	sci_out(port, SCSCR, scr | SCSCR_RIE);
 	dev_dbg(port->dev, "DMA Rx timed out\n");
 	schedule_work(&s->work_rx);
 }
