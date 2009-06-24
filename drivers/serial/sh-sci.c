@@ -81,6 +81,9 @@ struct sci_port {
 	struct timer_list	break_timer;
 	int			break_flag;
 
+        /* SCSCR initialization */
+        unsigned int            scscr;
+ 
 	/* Interface clock */
 	struct clk		*iclk;
 	/* Function clock */
@@ -1424,9 +1427,7 @@ static void sci_shutdown(struct uart_port *port)
 static void sci_set_termios(struct uart_port *port, struct ktermios *termios,
 			    struct ktermios *old)
 {
-#ifdef CONFIG_SERIAL_SH_SCI_DMA
 	struct sci_port *s = to_sci_port(port);
-#endif
 	unsigned int status, baud, smr_val, max_baud;
 	int t = -1;
 	u16 scfcr = 0;
@@ -1469,7 +1470,7 @@ static void sci_set_termios(struct uart_port *port, struct ktermios *termios,
 	sci_out(port, SCSMR, smr_val);
 
 	dev_dbg(port->dev, "%s: SMR %x, t %x, SCSCR %x\n", __func__, smr_val, t,
-		SCSCR_INIT(port));
+		s->scscr);
 
 	if (t > 0) {
 		if (t >= 256) {
@@ -1485,7 +1486,7 @@ static void sci_set_termios(struct uart_port *port, struct ktermios *termios,
 	sci_init_pins(port, termios->c_cflag);
 	sci_out(port, SCFCR, scfcr | ((termios->c_cflag & CRTSCTS) ? SCFCR_MCE : 0));
 
-	sci_out(port, SCSCR, SCSCR_INIT(port));
+	sci_out(port, SCSCR, s->scscr);
 
 #ifdef CONFIG_SERIAL_SH_SCI_DMA
 	/*
@@ -1653,6 +1654,7 @@ static int __devinit sci_init_single(struct platform_device *dev,
 	port->mapbase	= p->mapbase;
 	port->membase	= p->membase;
 
+	sci_port->scscr         = p->scscr;
 	port->irq	= p->irqs[SCIx_TXI_IRQ];
 	port->flags	= p->flags;
 	sci_port->type	= port->type = p->type;

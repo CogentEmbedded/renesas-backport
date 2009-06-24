@@ -20,6 +20,7 @@
 static struct plat_sci_port scif0_platform_data = {
 	.mapbase	= 0xffe00000,
 	.flags		= UPF_BOOT_AUTOCONF,
+	.scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE | SCSCR_CKE1,
 	.type		= PORT_SCIF,
 	.irqs		= { 40, 40, 40, 40 },
 };
@@ -35,6 +36,7 @@ static struct platform_device scif0_device = {
 static struct plat_sci_port scif1_platform_data = {
 	.mapbase	= 0xffe10000,
 	.flags		= UPF_BOOT_AUTOCONF,
+	.scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE | SCSCR_CKE1,
 	.type		= PORT_SCIF,
 	.irqs		= { 76, 76, 76, 76 },
 };

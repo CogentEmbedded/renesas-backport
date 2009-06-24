@@ -109,6 +109,7 @@ static struct platform_device rtc_device = {
 static struct plat_sci_port scif0_platform_data = {
 	.mapbase	= 0xfffffe80,
 	.flags		= UPF_BOOT_AUTOCONF,
+	.scscr          = SCSCR_TE | SCSCR_RE,
 	.type		= PORT_SCI,
 	.irqs		= { 23, 23, 23, 0 },
 };
@@ -126,6 +127,7 @@ static struct platform_device scif0_device = {
 static struct plat_sci_port scif1_platform_data = {
 	.mapbase	= 0xa4000150,
 	.flags		= UPF_BOOT_AUTOCONF,
+	.scscr          = SCSCR_TE | SCSCR_RE,
 	.type		= PORT_SCIF,
 	.irqs		= { 56, 56, 56, 56 },
 };
@@ -143,6 +145,7 @@ static struct platform_device scif1_device = {
 static struct plat_sci_port scif2_platform_data = {
 	.mapbase	= 0xa4000140,
 	.flags		= UPF_BOOT_AUTOCONF,
+	.scscr          = SCSCR_TE | SCSCR_RE,
 	.type		= PORT_IRDA,
 	.irqs		= { 52, 52, 52, 52 },
 };
