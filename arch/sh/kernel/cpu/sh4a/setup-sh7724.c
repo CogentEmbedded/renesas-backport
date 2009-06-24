@@ -258,6 +258,7 @@ static struct plat_sci_port scif0_platform_data = {
 	.mapbase        = 0xffe00000,
 	.flags          = UPF_BOOT_AUTOCONF,
         .scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE,
+	.scbrr_algo_id  = SCBRR_ALGO_2,
 	.type           = PORT_SCIF,
 	.irqs           = { 80, 80, 80, 80 },
 };
@@ -274,6 +275,7 @@ static struct plat_sci_port scif1_platform_data = {
 	.mapbase        = 0xffe10000,
 	.flags          = UPF_BOOT_AUTOCONF,
         .scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE,
+	.scbrr_algo_id  = SCBRR_ALGO_2,
 	.type           = PORT_SCIF,
 	.irqs           = { 81, 81, 81, 81 },
 };
@@ -290,6 +292,7 @@ static struct plat_sci_port scif2_platform_data = {
 	.mapbase        = 0xffe20000,
 	.flags          = UPF_BOOT_AUTOCONF,
         .scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE,
+	.scbrr_algo_id  = SCBRR_ALGO_2,
 	.type           = PORT_SCIF,
 	.irqs           = { 82, 82, 82, 82 },
 };
@@ -306,6 +309,7 @@ static struct plat_sci_port scif3_platform_data = {
 	.mapbase        = 0xa4e30000,
 	.flags          = UPF_BOOT_AUTOCONF,
         .scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE,
+	.scbrr_algo_id  = SCBRR_ALGO_3,
 	.type           = PORT_SCIFA,
 	.irqs           = { 56, 56, 56, 56 },
 };
@@ -322,6 +326,7 @@ static struct plat_sci_port scif4_platform_data = {
 	.mapbase        = 0xa4e40000,
 	.flags          = UPF_BOOT_AUTOCONF,
         .scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE,
+	.scbrr_algo_id  = SCBRR_ALGO_3,
 	.type           = PORT_SCIFA,
 	.irqs           = { 88, 88, 88, 88 },
 };
@@ -338,6 +343,7 @@ static struct plat_sci_port scif5_platform_data = {
 	.mapbase        = 0xa4e50000,
 	.flags          = UPF_BOOT_AUTOCONF,
         .scscr          = SCSCR_RE | SCSCR_TE | SCSCR_REIE,
+	.scbrr_algo_id  = SCBRR_ALGO_3,
 	.type           = PORT_SCIFA,
 	.irqs           = { 109, 109, 109, 109 },
 };
