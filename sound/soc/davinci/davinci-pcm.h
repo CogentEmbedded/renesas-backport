@@ -27,7 +27,4 @@ struct davinci_pcm_dma_params {
 	unsigned int fifo_level;
 };
 
-
-extern struct snd_soc_platform davinci_soc_platform;
-
 #endif
