@@ -78,4 +78,7 @@ config SH_TIMER_CMT
 
 endmenu
 
+config SH_CLK_CPG
+	bool
+
 endif
