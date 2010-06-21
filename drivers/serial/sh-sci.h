@@ -106,6 +106,15 @@
 # define SCSPTR0	0xffe00024	/* 16 bit SCIF */
 # define SCSPTR1	0xffe10024	/* 16 bit SCIF */
 # define SCIF_ORER	0x0001		/* Overrun error bit */
+
+#if defined(CONFIG_SH_SH2007)
+/* TIE=0,RIE=0,TE=1,RE=1,REIE=1,CKE1=0 */
+# define SCSCR_INIT(port)	0x38
+#else
+/* TIE=0,RIE=0,TE=1,RE=1,REIE=1,CKE1=1 */
+# define SCSCR_INIT(port)	0x3a
+#endif
+
 #elif defined(CONFIG_CPU_SUBTYPE_SH7785) || \
       defined(CONFIG_CPU_SUBTYPE_SH7786)
 # define SCSPTR0	0xffea0024	/* 16 bit SCIF */
