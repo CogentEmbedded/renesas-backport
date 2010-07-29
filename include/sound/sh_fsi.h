@@ -61,6 +61,8 @@
 #define SH_FSI_FMT_I2S		3
 #define SH_FSI_FMT_TDM		4
 #define SH_FSI_FMT_TDM_DELAY	5
+#define SH_FSI_FMT_SPDIF	6
+
 
 
 #define SH_FSI_IFMT_TDM_CH(x) \
