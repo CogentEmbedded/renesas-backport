@@ -1,5 +1,5 @@
 /*
- *  arch/arm/common/clkdev.c
+ * drivers/clk/clkdev.c
  *
  *  Copyright (C) 2008 Russell King.
  *
@@ -18,10 +18,7 @@
 #include <linux/string.h>
 #include <linux/mutex.h>
 #include <linux/clk.h>
-#include <linux/slab.h>
-
-#include <asm/clkdev.h>
-#include <mach/clkdev.h>
+#include <linux/clkdev.h>
 
 static LIST_HEAD(clocks);
 static DEFINE_MUTEX(clocks_mutex);
@@ -120,12 +117,12 @@ struct clk_lookup_alloc {
 	char	con_id[MAX_CON_ID];
 };
 
-struct clk_lookup *clkdev_alloc(struct clk *clk, const char *con_id,
-	const char *dev_fmt, ...)
+struct clk_lookup * __init_refok
+clkdev_alloc(struct clk *clk, const char *con_id, const char *dev_fmt, ...)
 {
 	struct clk_lookup_alloc *cla;
 
-	cla = kzalloc(sizeof(*cla), GFP_KERNEL);
+	cla = __clkdev_alloc(sizeof(*cla));
 	if (!cla)
 		return NULL;
 
