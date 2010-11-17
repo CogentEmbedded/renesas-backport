@@ -22,6 +22,7 @@
 # define SCPDR 0xA4000136
 #elif defined(CONFIG_CPU_SUBTYPE_SH7720) || \
       defined(CONFIG_CPU_SUBTYPE_SH7721) || \
+      defined(CONFIG_ARCH_SH73A0) || \
       defined(CONFIG_ARCH_SH7367) || \
       defined(CONFIG_ARCH_SH7377) || \
       defined(CONFIG_ARCH_SH7372)
@@ -178,6 +179,7 @@
 #if defined(CONFIG_CPU_SUBTYPE_SH7705) || \
     defined(CONFIG_CPU_SUBTYPE_SH7720) || \
     defined(CONFIG_CPU_SUBTYPE_SH7721) || \
+    defined(CONFIG_ARCH_SH73A0) || \
     defined(CONFIG_ARCH_SH7367) || \
     defined(CONFIG_ARCH_SH7377) || \
     defined(CONFIG_ARCH_SH7372)
@@ -214,6 +216,7 @@
 #if defined(CONFIG_CPU_SUBTYPE_SH7705) || \
     defined(CONFIG_CPU_SUBTYPE_SH7720) || \
     defined(CONFIG_CPU_SUBTYPE_SH7721) || \
+    defined(CONFIG_ARCH_SH73A0) || \
     defined(CONFIG_ARCH_SH7367) || \
     defined(CONFIG_ARCH_SH7377) || \
     defined(CONFIG_ARCH_SH7372)
@@ -300,6 +303,7 @@
   }
 
 #if defined(CONFIG_CPU_SH3) || \
+    defined(CONFIG_ARCH_SH73A0) || \
     defined(CONFIG_ARCH_SH7367) || \
     defined(CONFIG_ARCH_SH7377) || \
     defined(CONFIG_ARCH_SH7372)
@@ -313,6 +317,7 @@
 #elif defined(CONFIG_CPU_SUBTYPE_SH7705) || \
       defined(CONFIG_CPU_SUBTYPE_SH7720) || \
       defined(CONFIG_CPU_SUBTYPE_SH7721) || \
+      defined(CONFIG_ARCH_SH73A0) || \
       defined(CONFIG_ARCH_SH7367) || \
       defined(CONFIG_ARCH_SH7377)
 #define SCIF_FNS(name, scif_offset, scif_size) \
@@ -355,6 +360,7 @@
 #if defined(CONFIG_CPU_SUBTYPE_SH7705) || \
     defined(CONFIG_CPU_SUBTYPE_SH7720) || \
     defined(CONFIG_CPU_SUBTYPE_SH7721) || \
+    defined(CONFIG_ARCH_SH73A0) || \
     defined(CONFIG_ARCH_SH7367) || \
     defined(CONFIG_ARCH_SH7377)
 
