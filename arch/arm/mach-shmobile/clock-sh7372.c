@@ -453,7 +453,7 @@ static int fsidiv_enable(struct clk *clk)
 
 	value  = __raw_readl(clk->mapping->base) >> 16;
 	if (value < 2)
-		return -ENOENT;
+		return -EIO;
 
 	__raw_writel((value << 16) | 0x3, clk->mapping->base);
 
@@ -466,7 +466,7 @@ static int fsidiv_set_rate(struct clk *clk, unsigned long rate)
 
 	idx = (clk->parent->rate / rate) & 0xffff;
 	if (idx < 2)
-		return -ENOENT;
+		return -EINVAL;
 
 	__raw_writel(idx << 16, clk->mapping->base);
 	return 0;
