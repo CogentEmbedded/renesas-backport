@@ -783,6 +783,18 @@ static irqreturn_t sci_br_interrupt(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
+static inline unsigned long port_rx_irq_mask(struct uart_port *port)
+{
+	/*
+	 * Not all ports (such as SCIFA) will support REIE. Rather than
+	 * special-casing the port type, we check the port initialization
+	 * IRQ enable mask to see whether the IRQ is desired at all. If
+	 * it's unset, it's logically inferred that there's no point in
+	 * testing for it.
+	 */
+	return SCSCR_RIE | (to_sci_port(port)->scscr & SCSCR_REIE);
+}
+
 static irqreturn_t sci_mpxed_interrupt(int irq, void *ptr)
 {
 	unsigned short ssr_status, scr_status, err_enabled;
