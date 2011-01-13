@@ -24,8 +24,9 @@ obj-$(CONFIG_XEN)		+= xen/
 # regulators early, since some subsystems rely on them to initialize
 obj-$(CONFIG_REGULATOR)		+= regulator/
 
-# char/ comes before serial/ etc so that the VT console is the boot-time
+# tty/ comes before char/ so that the VT console is the boot-time
 # default.
+obj-y                           += tty/
 obj-y				+= char/
 
 # gpu/ comes after char for AGP vs DRM startup
@@ -37,7 +38,6 @@ obj-$(CONFIG_CONNECTOR)		+= connector/
 obj-$(CONFIG_FB_I810)           += video/i810/
 obj-$(CONFIG_FB_INTEL)          += video/intelfb/
 
-obj-y				+= serial/
 obj-$(CONFIG_PARPORT)		+= parport/
 obj-y				+= base/ block/ misc/ mfd/
 obj-$(CONFIG_NUBUS)		+= nubus/
