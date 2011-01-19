@@ -1445,27 +1445,28 @@ static void sci_shutdown(struct uart_port *port)
 		s->disable(port);
 }
 
- static unsigned int sci_scbrr_calc(unsigned int algo_id, unsigned int bps,
-                                   unsigned long freq)
- {
-        switch (algo_id) {
-        case SCBRR_ALGO_1:
-                return ((freq + 16 * bps) / (16 * bps) - 1);
-        case SCBRR_ALGO_2:
-                return ((freq + 16 * bps) / (32 * bps) - 1);
-        case SCBRR_ALGO_3:
-                return (((freq * 2) + 16 * bps) / (16 * bps) - 1);
-        case SCBRR_ALGO_4:
-                return (((freq * 2) + 16 * bps) / (32 * bps) - 1);
-        case SCBRR_ALGO_5:
-                return (((freq * 1000 / 32) / bps) - 1);
-        }
- 
-        /* Warn, but use a safe default */
-        WARN_ON(1);
-        return ((freq + 16 * bps) / (32 * bps) - 1);
- }
- 
+static unsigned int sci_scbrr_calc(unsigned int algo_id, unsigned int bps,
+				   unsigned long freq)
+{
+	switch (algo_id) {
+	case SCBRR_ALGO_1:
+		return ((freq + 16 * bps) / (16 * bps) - 1);
+	case SCBRR_ALGO_2:
+		return ((freq + 16 * bps) / (32 * bps) - 1);
+	case SCBRR_ALGO_3:
+		return (((freq * 2) + 16 * bps) / (16 * bps) - 1);
+	case SCBRR_ALGO_4:
+		return (((freq * 2) + 16 * bps) / (32 * bps) - 1);
+	case SCBRR_ALGO_5:
+		return (((freq * 1000 / 32) / bps) - 1);
+	}
+
+	/* Warn, but use a safe default */
+	WARN_ON(1);
+
+	return ((freq + 16 * bps) / (32 * bps) - 1);
+}
+
 static void sci_set_termios(struct uart_port *port, struct ktermios *termios,
 			    struct ktermios *old)
 {
@@ -1498,6 +1499,7 @@ static void sci_set_termios(struct uart_port *port, struct ktermios *termios,
 		sci_out(port, SCFCR, scfcr | SCFCR_RFRST | SCFCR_TFRST);
 
 	smr_val = sci_in(port, SCSMR) & 3;
+
 	if ((termios->c_cflag & CSIZE) == CS7)
 		smr_val |= 0x40;
 	if (termios->c_cflag & PARENB)
@@ -1596,8 +1598,7 @@ static void sci_config_port(struct uart_port *port, int flags)
 
 	if (port->flags & UPF_IOREMAP) {
 		port->membase = ioremap_nocache(port->mapbase, 0x40);
-
-		if (IS_ERR(port->membase))
+		if (unlikely(!port->membase))
 			dev_err(port->dev, "can't remap port#%d\n", port->line);
 	} else {
 		/*
