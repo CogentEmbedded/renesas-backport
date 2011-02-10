@@ -504,4 +504,8 @@ const struct dev_pm_ops usb_hcd_pci_pm_ops = {
 };
 EXPORT_SYMBOL_GPL(usb_hcd_pci_pm_ops);
 
+<<<<<<< HEAD
 #endif	/* CONFIG_PM_SLEEP */
+=======
+#endif	/* CONFIG_PM */
+>>>>>>> aa33860... PM: Remove CONFIG_PM_OPS
