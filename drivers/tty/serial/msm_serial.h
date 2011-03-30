@@ -1,6 +1,4 @@
 /*
- * drivers/serial/msm_serial.h
- *
  * Copyright (C) 2007 Google, Inc.
  * Author: Robert Love <rlove@google.com>
  *
