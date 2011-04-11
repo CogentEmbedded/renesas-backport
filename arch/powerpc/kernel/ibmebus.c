@@ -317,6 +317,7 @@ static struct bus_attribute ibmebus_bus_attrs[] = {
 	__ATTR_NULL
 };
 
+
 struct bus_type ibmebus_bus_type = {
 	.uevent    = of_device_uevent,
 	.bus_attrs = ibmebus_bus_attrs
