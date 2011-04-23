@@ -125,9 +125,14 @@ int clk_rate_table_find(struct clk *clk,
 long clk_rate_div_range_round(struct clk *clk, unsigned int div_min,
 			      unsigned int div_max, unsigned long rate);
 
-long clk_round_parent(struct clk *clk, unsigned long target,
+static inline long clk_round_parent(struct clk *clk, unsigned long target,
 		      unsigned long *best_freq, unsigned long *parent_freq,
-		      unsigned int div_min, unsigned int div_max);
+		      unsigned int div_min, unsigned int div_max)
+{
+	WARN(1, "Implement clk_round_parent");
+	BUG();
+	return 0;
+}
 
 #define SH_CLK_MSTP32(_parent, _enable_reg, _enable_bit, _flags)	\
 {									\
