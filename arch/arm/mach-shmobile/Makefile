@@ -18,6 +18,7 @@ obj-$(CONFIG_GENERIC_GPIO)	+= $(pfc-y)
 
 # PM objects
 obj-$(CONFIG_SUSPEND)		+= suspend.o
+obj-$(CONFIG_CPU_IDLE)		+= cpuidle.o
 obj-$(CONFIG_ARCH_SH7372)	+= pm-sh7372.o sleep-sh7372.o
 
 # Board objects
