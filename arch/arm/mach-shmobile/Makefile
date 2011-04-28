@@ -16,6 +16,9 @@ pfc-$(CONFIG_ARCH_SH7377)	:= pfc-sh7377.o
 pfc-$(CONFIG_ARCH_SH7372)	:= pfc-sh7372.o
 obj-$(CONFIG_GENERIC_GPIO)	+= $(pfc-y)
 
+# PM objects
+obj-$(CONFIG_SUSPEND)		+= suspend.o
+
 # Board objects
 obj-$(CONFIG_MACH_G3EVM)	+= board-g3evm.o
 obj-$(CONFIG_MACH_G4EVM)	+= board-g4evm.o
