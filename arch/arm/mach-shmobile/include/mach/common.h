@@ -6,6 +6,7 @@ extern void shmobile_setup_console(void);
 struct clk;
 
 extern int clk_init(void);
+extern struct platform_suspend_ops shmobile_suspend_ops;
 
 extern void sh7367_init_irq(void);
 extern void sh7367_add_early_devices(void);
