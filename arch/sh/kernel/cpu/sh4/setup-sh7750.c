@@ -38,6 +38,7 @@ static struct platform_device rtc_device = {
 
 static struct plat_sci_port scif0_platform_data = {
 	.mapbase	= 0xffe00000,
+	.port_reg	= 0xffe0001C
 	.flags		= UPF_BOOT_AUTOCONF,
 	.type		= PORT_SCI,
 	.scscr          = SCSCR_TE | SCSCR_RE,
