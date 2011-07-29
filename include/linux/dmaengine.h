@@ -25,6 +25,10 @@
 #include <linux/uio.h>
 #include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
+#include <linux/bitmap.h>
+#include <asm/page.h>
+
+struct scatterlist;
 
 /**
  * typedef dma_cookie_t - an opaque DMA cookie
