@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/pm_clock.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/tlbflush.h>
