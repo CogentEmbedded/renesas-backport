@@ -261,7 +261,8 @@ extern int pm_runtime_clk_suspend(struct device *dev);
 extern int pm_runtime_clk_resume(struct device *dev);
 =======
 #ifdef CONFIG_PM_CLK
-extern int pm_clk_init(struct device *dev);
+extern void pm_clk_init(struct device *dev);
+extern int pm_clk_create(struct device *dev);
 extern void pm_clk_destroy(struct device *dev);
 extern int pm_clk_add(struct device *dev, const char *con_id);
 extern void pm_clk_remove(struct device *dev, const char *con_id);
@@ -269,7 +270,10 @@ extern int pm_clk_suspend(struct device *dev);
 extern int pm_clk_resume(struct device *dev);
 >>>>>>> 3d5c303... PM: Rename clock management functions
 #else
-static inline int pm_clk_init(struct device *dev)
+static inline void pm_clk_init(struct device *dev)
+{
+}
+static inline int pm_clk_create(struct device *dev)
 {
 	return -EINVAL;
 }
