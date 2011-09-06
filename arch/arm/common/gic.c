@@ -26,7 +26,6 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/smp.h>
-#include <linux/cpu_pm.h>
 #include <linux/cpumask.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
@@ -210,6 +209,32 @@ static int gic_set_wake(struct irq_data *d, unsigned int on)
 #else
 #define gic_set_wake	NULL
 #endif
+
+asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
+{
+	u32 irqstat, irqnr;
+	struct gic_chip_data *gic = &gic_data[0];
+	void __iomem *cpu_base = gic->cpu_base;
+
+	do {
+		irqstat = readl_relaxed(cpu_base + GIC_CPU_INTACK);
+		irqnr = irqstat & ~0x1c00;
+
+		if (likely(irqnr > 15 && irqnr < 1021)) {
+			//irqnr = irqnr + gic->irq_offset;
+			handle_IRQ(irqnr, regs);
+			continue;
+		}
+		if (irqnr < 16) {
+			writel_relaxed(irqstat, cpu_base + GIC_CPU_EOI);
+#ifdef CONFIG_SMP
+			handle_IPI(irqnr, regs);
+#endif
+			continue;
+		}
+		break;
+	} while (1);
+}
 
 static void gic_handle_cascade_irq(unsigned int irq, struct irq_desc *desc)
 {
