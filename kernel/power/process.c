@@ -188,7 +188,7 @@ void thaw_processes(void)
 		if (cgroup_freezing_or_frozen(p))
 			continue;
 
-		thaw_process(p);
+		__thaw_task(p);
 	} while_each_thread(g, p);
 	read_unlock(&tasklist_lock);
 
