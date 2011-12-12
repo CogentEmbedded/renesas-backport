@@ -125,8 +125,6 @@ static struct clk mstp_clks[MSTP_NR] = {
 	[MSTP102] = SH_CLK_MSTP32(NULL, MSTPCR1, 2, 0),
 };
 
-#define CLKDEV_CON_ID(_id, _clk) { .con_id = _id, .clk = _clk }
-
 static struct clk_lookup lookups[] = {
 	/* main clocks */
 	CLKDEV_CON_ID("extal", &extal_clk),

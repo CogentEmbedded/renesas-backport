@@ -4,17 +4,26 @@
 #include <linux/list.h>
 #include <linux/seq_file.h>
 #include <linux/cpufreq.h>
+#include <linux/types.h>
+#include <linux/kref.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 
 struct clk;
+
+struct clk_mapping {
+	phys_addr_t		phys;
+	void __iomem		*base;
+	unsigned long		len;
+	struct kref		ref;
+};
 
 struct clk_ops {
 	void (*init)(struct clk *clk);
 	int (*enable)(struct clk *clk);
 	void (*disable)(struct clk *clk);
 	unsigned long (*recalc)(struct clk *clk);
-	int (*set_rate)(struct clk *clk, unsigned long rate, int algo_id);
+	int (*set_rate)(struct clk *clk, unsigned long rate);
 	int (*set_parent)(struct clk *clk, struct clk *parent);
 	long (*round_rate)(struct clk *clk, unsigned long rate);
 };
@@ -25,6 +34,10 @@ struct clk {
 	int			id;
 
 	struct clk		*parent;
+	struct clk		**parent_table;	/* list of parents to */
+	unsigned short		parent_num;	/* choose between */
+	unsigned char		src_shift;	/* source clock field in the */
+	unsigned char		src_width;	/* configuration register */
 	struct clk_ops		*ops;
 
 	struct list_head	children;
@@ -41,7 +54,9 @@ struct clk {
 	unsigned long		arch_flags;
 	void			*priv;
 	struct dentry		*dentry;
+	struct clk_mapping	*mapping;
 	struct cpufreq_frequency_table *freq_table;
+	unsigned int		nr_freqs;
 };
 
 #define CLK_ENABLE_ON_INIT	(1 << 0)
@@ -107,6 +122,18 @@ int clk_rate_table_find(struct clk *clk,
 			struct cpufreq_frequency_table *freq_table,
 			unsigned long rate);
 
+long clk_rate_div_range_round(struct clk *clk, unsigned int div_min,
+			      unsigned int div_max, unsigned long rate);
+
+static inline long clk_round_parent(struct clk *clk, unsigned long target,
+		      unsigned long *best_freq, unsigned long *parent_freq,
+		      unsigned int div_min, unsigned int div_max)
+{
+	WARN(1, "Implement clk_round_parent");
+	BUG();
+	return 0;
+}
+
 #define SH_CLK_MSTP32(_parent, _enable_reg, _enable_bit, _flags)	\
 {									\
 	.parent		= _parent,					\
@@ -138,13 +165,26 @@ int sh_clk_div4_enable_register(struct clk *clks, int nr,
 int sh_clk_div4_reparent_register(struct clk *clks, int nr,
 			 struct clk_div4_table *table);
 
-#define SH_CLK_DIV6(_parent, _reg, _flags)	\
-{						\
-	.parent = _parent,			\
-	.enable_reg = (void __iomem *)_reg,	\
-	.flags = _flags,			\
+#define SH_CLK_DIV6_EXT(_parent, _reg, _flags, _parents,	\
+			_num_parents, _src_shift, _src_width)	\
+{								\
+	.parent = _parent,					\
+	.enable_reg = (void __iomem *)_reg,			\
+	.flags = _flags,					\
+	.parent_table = _parents,				\
+	.parent_num = _num_parents,				\
+	.src_shift = _src_shift,				\
+	.src_width = _src_width,				\
 }
 
+#define SH_CLK_DIV6(_parent, _reg, _flags)			\
+	SH_CLK_DIV6_EXT(_parent, _reg, _flags, NULL, 0, 0, 0)
+
 int sh_clk_div6_register(struct clk *clks, int nr);
+int sh_clk_div6_reparent_register(struct clk *clks, int nr);
+
+#define CLKDEV_CON_ID(_id, _clk) { .con_id = _id, .clk = _clk }
+#define CLKDEV_DEV_ID(_id, _clk) { .dev_id = _id, .clk = _clk }
+#define CLKDEV_ICK_ID(_cid, _did, _clk) { .con_id = _cid, .dev_id = _did, .clk = _clk }
 
 #endif /* __SH_CLOCK_H */

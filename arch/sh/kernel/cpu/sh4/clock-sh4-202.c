@@ -110,7 +110,7 @@ static int shoc_clk_verify_rate(struct clk *clk, unsigned long rate)
 	return 0;
 }
 
-static int shoc_clk_set_rate(struct clk *clk, unsigned long rate, int algo_id)
+static int shoc_clk_set_rate(struct clk *clk, unsigned long rate)
 {
 	unsigned long frqcr3;
 	unsigned int tmp;
@@ -147,8 +147,6 @@ static struct clk *sh4202_onchip_clocks[] = {
 	&sh4202_femi_clk,
 	&sh4202_shoc_clk,
 };
-
-#define CLKDEV_CON_ID(_id, _clk) { .con_id = _id, .clk = _clk }
 
 static struct clk_lookup lookups[] = {
 	/* main clocks */
