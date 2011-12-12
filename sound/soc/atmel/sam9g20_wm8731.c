@@ -69,8 +69,8 @@ static int at91sam9g20ek_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret;
 
 	/* set codec DAI configuration */
@@ -136,9 +136,11 @@ static const struct snd_soc_dapm_route intercon[] = {
 /*
  * Logic for a wm8731 as connected on a at91sam9g20ek board.
  */
-static int at91sam9g20ek_wm8731_init(struct snd_soc_codec *codec)
+static int at91sam9g20ek_wm8731_init(struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_dai *codec_dai = &codec->dai[0];
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	int ret;
 
 	printk(KERN_DEBUG
@@ -153,25 +155,25 @@ static int at91sam9g20ek_wm8731_init(struct snd_soc_codec *codec)
 	}
 
 	/* Add specific widgets */
-	snd_soc_dapm_new_controls(codec, at91sam9g20ek_dapm_widgets,
+	snd_soc_dapm_new_controls(dapm, at91sam9g20ek_dapm_widgets,
 				  ARRAY_SIZE(at91sam9g20ek_dapm_widgets));
 	/* Set up specific audio path interconnects */
-	snd_soc_dapm_add_routes(codec, intercon, ARRAY_SIZE(intercon));
+	snd_soc_dapm_add_routes(dapm, intercon, ARRAY_SIZE(intercon));
 
 	/* not connected */
-	snd_soc_dapm_nc_pin(codec, "RLINEIN");
-	snd_soc_dapm_nc_pin(codec, "LLINEIN");
+	snd_soc_dapm_nc_pin(dapm, "RLINEIN");
+	snd_soc_dapm_nc_pin(dapm, "LLINEIN");
 
 #ifdef ENABLE_MIC_INPUT
-	snd_soc_dapm_enable_pin(codec, "Int Mic");
+	snd_soc_dapm_enable_pin(dapm, "Int Mic");
 #else
-	snd_soc_dapm_nc_pin(codec, "Int Mic");
+	snd_soc_dapm_nc_pin(dapm, "Int Mic");
 #endif
 
 	/* always connected */
-	snd_soc_dapm_enable_pin(codec, "Ext Spk");
+	snd_soc_dapm_enable_pin(dapm, "Ext Spk");
 
-	snd_soc_dapm_sync(codec);
+	snd_soc_dapm_sync(dapm);
 
 	return 0;
 }
@@ -179,31 +181,25 @@ static int at91sam9g20ek_wm8731_init(struct snd_soc_codec *codec)
 static struct snd_soc_dai_link at91sam9g20ek_dai = {
 	.name = "WM8731",
 	.stream_name = "WM8731 PCM",
-	.cpu_dai = &atmel_ssc_dai[0],
-	.codec_dai = &wm8731_dai,
+	.cpu_dai_name = "atmel-ssc-dai.0",
+	.codec_dai_name = "wm8731-hifi",
 	.init = at91sam9g20ek_wm8731_init,
+	.platform_name = "atmel_pcm-audio",
+	.codec_name = "wm8731-codec.0-001a",
 	.ops = &at91sam9g20ek_ops,
 };
 
 static struct snd_soc_card snd_soc_at91sam9g20ek = {
 	.name = "AT91SAMG20-EK",
-	.platform = &atmel_soc_platform,
 	.dai_link = &at91sam9g20ek_dai,
 	.num_links = 1,
 	.set_bias_level = at91sam9g20ek_set_bias_level,
-};
-
-static struct snd_soc_device at91sam9g20ek_snd_devdata = {
-	.card = &snd_soc_at91sam9g20ek,
-	.codec_dev = &soc_codec_dev_wm8731,
 };
 
 static struct platform_device *at91sam9g20ek_snd_device;
 
 static int __init at91sam9g20ek_init(void)
 {
-	struct atmel_ssc_info *ssc_p = at91sam9g20ek_dai.cpu_dai->private_data;
-	struct ssc_device *ssc = NULL;
 	struct clk *pllb;
 	int ret;
 
@@ -235,18 +231,6 @@ static int __init at91sam9g20ek_init(void)
 
 	clk_set_rate(mclk, MCLK_RATE);
 
-	/*
-	 * Request SSC device
-	 */
-	ssc = ssc_request(0);
-	if (IS_ERR(ssc)) {
-		printk(KERN_ERR "ASoC: Failed to request SSC 0\n");
-		ret = PTR_ERR(ssc);
-		ssc = NULL;
-		goto err_ssc;
-	}
-	ssc_p->ssc = ssc;
-
 	at91sam9g20ek_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!at91sam9g20ek_snd_device) {
 		printk(KERN_ERR "ASoC: Platform device allocation failed\n");
@@ -254,8 +238,7 @@ static int __init at91sam9g20ek_init(void)
 	}
 
 	platform_set_drvdata(at91sam9g20ek_snd_device,
-			&at91sam9g20ek_snd_devdata);
-	at91sam9g20ek_snd_devdata.dev = &at91sam9g20ek_snd_device->dev;
+			&snd_soc_at91sam9g20ek);
 
 	ret = platform_device_add(at91sam9g20ek_snd_device);
 	if (ret) {
@@ -265,9 +248,6 @@ static int __init at91sam9g20ek_init(void)
 
 	return ret;
 
-err_ssc:
-	ssc_free(ssc);
-	ssc_p->ssc = NULL;
 err_mclk:
 	clk_put(mclk);
 	mclk = NULL;
@@ -277,16 +257,6 @@ err:
 
 static void __exit at91sam9g20ek_exit(void)
 {
-	struct atmel_ssc_info *ssc_p = at91sam9g20ek_dai.cpu_dai->private_data;
-	struct ssc_device *ssc;
-
-	if (ssc_p != NULL) {
-		ssc = ssc_p->ssc;
-		if (ssc != NULL)
-			ssc_free(ssc);
-		ssc_p->ssc = NULL;
-	}
-
 	platform_device_unregister(at91sam9g20ek_snd_device);
 	at91sam9g20ek_snd_device = NULL;
 	clk_put(mclk);

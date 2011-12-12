@@ -263,15 +263,9 @@ static int au1xpsc_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	return ret;
 }
 
-static int au1xpsc_i2s_probe(struct platform_device *pdev,
-			     struct snd_soc_dai *dai)
+static int au1xpsc_i2s_probe(struct snd_soc_dai *dai)
 {
 	return 	au1xpsc_i2s_workdata ? 0 : -ENODEV;
-}
-
-static void au1xpsc_i2s_remove(struct platform_device *pdev,
-			       struct snd_soc_dai *dai)
-{
 }
 
 static struct snd_soc_dai_ops au1xpsc_i2s_dai_ops = {
@@ -280,10 +274,8 @@ static struct snd_soc_dai_ops au1xpsc_i2s_dai_ops = {
 	.set_fmt	= au1xpsc_i2s_set_fmt,
 };
 
-struct snd_soc_dai au1xpsc_i2s_dai = {
-	.name			= "au1xpsc_i2s",
+static struct snd_soc_dai_driver au1xpsc_i2s_dai = {
 	.probe			= au1xpsc_i2s_probe,
-	.remove			= au1xpsc_i2s_remove,
 	.playback = {
 		.rates		= AU1XPSC_I2S_RATES,
 		.formats	= AU1XPSC_I2S_FMTS,
@@ -298,7 +290,6 @@ struct snd_soc_dai au1xpsc_i2s_dai = {
 	},
 	.ops = &au1xpsc_i2s_dai_ops,
 };
-EXPORT_SYMBOL(au1xpsc_i2s_dai);
 
 static int __devinit au1xpsc_i2s_drvprobe(struct platform_device *pdev)
 {
@@ -348,7 +339,7 @@ static int __devinit au1xpsc_i2s_drvprobe(struct platform_device *pdev)
 	 * time out.
 	 */
 
-	ret = snd_soc_register_dai(&au1xpsc_i2s_dai);
+	ret = snd_soc_register_dai(&pdev->dev, &au1xpsc_i2s_dai);
 	if (ret)
 		goto out1;
 
@@ -360,7 +351,7 @@ static int __devinit au1xpsc_i2s_drvprobe(struct platform_device *pdev)
 		return 0;
 	}
 
-	snd_soc_unregister_dai(&au1xpsc_i2s_dai);
+	snd_soc_unregister_dai(&pdev->dev);
 out1:
 	release_resource(wd->ioarea);
 	kfree(wd->ioarea);
@@ -376,7 +367,7 @@ static int __devexit au1xpsc_i2s_drvremove(struct platform_device *pdev)
 	if (wd->dmapd)
 		au1xpsc_pcm_destroy(wd->dmapd);
 
-	snd_soc_unregister_dai(&au1xpsc_i2s_dai);
+	snd_soc_unregister_dai(&pdev->dev);
 
 	au_writel(0, I2S_CFG(wd));
 	au_sync();
@@ -439,7 +430,7 @@ static struct dev_pm_ops au1xpsci2s_pmops = {
 
 static struct platform_driver au1xpsc_i2s_driver = {
 	.driver		= {
-		.name	= "au1xpsc_i2s",
+		.name	= "au1xpsc",
 		.owner	= THIS_MODULE,
 		.pm	= AU1XPSCI2S_PMOPS,
 	},

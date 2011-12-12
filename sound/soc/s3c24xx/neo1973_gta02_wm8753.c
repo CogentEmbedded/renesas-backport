@@ -41,8 +41,8 @@ static int neo1973_gta02_hifi_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	unsigned int pll_out = 0, bclk = 0;
 	int ret = 0;
 	unsigned long iis_clkrate;
@@ -130,7 +130,7 @@ static int neo1973_gta02_hifi_hw_params(struct snd_pcm_substream *substream,
 static int neo1973_gta02_hifi_hw_free(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	/* disable the PLL */
 	return snd_soc_dai_set_pll(codec_dai, WM8753_PLL1, 0, 0, 0);
@@ -149,7 +149,7 @@ static int neo1973_gta02_voice_hw_params(
 	struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	unsigned int pcmdiv = 0;
 	int ret = 0;
 	unsigned long iis_clkrate;
@@ -194,7 +194,7 @@ static int neo1973_gta02_voice_hw_params(
 static int neo1973_gta02_voice_hw_free(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	/* disable the PLL */
 	return snd_soc_dai_set_pll(codec_dai, WM8753_PLL2, 0, 0, 0);
@@ -262,7 +262,7 @@ static int lm4853_event(struct snd_soc_dapm_widget *w,
 			struct snd_kcontrol *k,
 			int event)
 {
-	gpio_set_value(GTA02_GPIO_AMP_SHUT, SND_SOC_DAPM_EVENT_OFF(value));
+	gpio_set_value(GTA02_GPIO_AMP_SHUT, SND_SOC_DAPM_EVENT_OFF(event));
 
 	return 0;
 }
@@ -330,18 +330,20 @@ static const struct snd_kcontrol_new wm8753_neo1973_gta02_controls[] = {
  * This is an example machine initialisation for a wm8753 connected to a
  * neo1973 GTA02.
  */
-static int neo1973_gta02_wm8753_init(struct snd_soc_codec *codec)
+static int neo1973_gta02_wm8753_init(struct snd_soc_pcm_runtime *rtd)
 {
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	int err;
 
 	/* set up NC codec pins */
-	snd_soc_dapm_nc_pin(codec, "OUT3");
-	snd_soc_dapm_nc_pin(codec, "OUT4");
-	snd_soc_dapm_nc_pin(codec, "LINE1");
-	snd_soc_dapm_nc_pin(codec, "LINE2");
+	snd_soc_dapm_nc_pin(dapm, "OUT3");
+	snd_soc_dapm_nc_pin(dapm, "OUT4");
+	snd_soc_dapm_nc_pin(dapm, "LINE1");
+	snd_soc_dapm_nc_pin(dapm, "LINE2");
 
 	/* Add neo1973 gta02 specific widgets */
-	snd_soc_dapm_new_controls(codec, wm8753_dapm_widgets,
+	snd_soc_dapm_new_controls(dapm, wm8753_dapm_widgets,
 				  ARRAY_SIZE(wm8753_dapm_widgets));
 
 	/* add neo1973 gta02 specific controls */
@@ -352,25 +354,25 @@ static int neo1973_gta02_wm8753_init(struct snd_soc_codec *codec)
 		return err;
 
 	/* set up neo1973 gta02 specific audio path audio_map */
-	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
+	snd_soc_dapm_add_routes(dapm, audio_map, ARRAY_SIZE(audio_map));
 
 	/* set endpoints to default off mode */
-	snd_soc_dapm_disable_pin(codec, "Stereo Out");
-	snd_soc_dapm_disable_pin(codec, "GSM Line Out");
-	snd_soc_dapm_disable_pin(codec, "GSM Line In");
-	snd_soc_dapm_disable_pin(codec, "Headset Mic");
-	snd_soc_dapm_disable_pin(codec, "Handset Mic");
-	snd_soc_dapm_disable_pin(codec, "Handset Spk");
+	snd_soc_dapm_disable_pin(dapm, "Stereo Out");
+	snd_soc_dapm_disable_pin(dapm, "GSM Line Out");
+	snd_soc_dapm_disable_pin(dapm, "GSM Line In");
+	snd_soc_dapm_disable_pin(dapm, "Headset Mic");
+	snd_soc_dapm_disable_pin(dapm, "Handset Mic");
+	snd_soc_dapm_disable_pin(dapm, "Handset Spk");
 
 	/* allow audio paths from the GSM modem to run during suspend */
-	snd_soc_dapm_ignore_suspend(codec, "Stereo Out");
-	snd_soc_dapm_ignore_suspend(codec, "GSM Line Out");
-	snd_soc_dapm_ignore_suspend(codec, "GSM Line In");
-	snd_soc_dapm_ignore_suspend(codec, "Headset Mic");
-	snd_soc_dapm_ignore_suspend(codec, "Handset Mic");
-	snd_soc_dapm_ignore_suspend(codec, "Handset Spk");
+	snd_soc_dapm_ignore_suspend(dapm, "Stereo Out");
+	snd_soc_dapm_ignore_suspend(dapm, "GSM Line Out");
+	snd_soc_dapm_ignore_suspend(dapm, "GSM Line In");
+	snd_soc_dapm_ignore_suspend(dapm, "Headset Mic");
+	snd_soc_dapm_ignore_suspend(dapm, "Handset Mic");
+	snd_soc_dapm_ignore_suspend(dapm, "Handset Spk");
 
-	snd_soc_dapm_sync(codec);
+	snd_soc_dapm_sync(dapm);
 
 	return 0;
 }
@@ -378,9 +380,8 @@ static int neo1973_gta02_wm8753_init(struct snd_soc_codec *codec)
 /*
  * BT Codec DAI
  */
-static struct snd_soc_dai bt_dai = {
-	.name = "Bluetooth",
-	.id = 0,
+static struct snd_soc_dai_driver bt_dai = {
+	.name = "bluetooth-dai",
 	.playback = {
 		.channels_min = 1,
 		.channels_max = 1,
@@ -397,30 +398,28 @@ static struct snd_soc_dai_link neo1973_gta02_dai[] = {
 { /* Hifi Playback - for similatious use with voice below */
 	.name = "WM8753",
 	.stream_name = "WM8753 HiFi",
-	.cpu_dai = &s3c24xx_i2s_dai,
-	.codec_dai = &wm8753_dai[WM8753_DAI_HIFI],
+	.cpu_dai_name = "s3c24xx-i2s",
+	.codec_dai_name = "wm8753-hifi",
 	.init = neo1973_gta02_wm8753_init,
+	.platform_name = "s3c24xx-pcm-audio",
+	.codec_name = "wm8753-codec.0-0x1a",
 	.ops = &neo1973_gta02_hifi_ops,
 },
 { /* Voice via BT */
 	.name = "Bluetooth",
 	.stream_name = "Voice",
-	.cpu_dai = &bt_dai,
-	.codec_dai = &wm8753_dai[WM8753_DAI_VOICE],
+	.cpu_dai_name = "bluetooth-dai",
+	.codec_dai_name = "wm8753-voice",
 	.ops = &neo1973_gta02_voice_ops,
+	.codec_name = "wm8753-codec.0-0x1a",
+	.platform_name = "s3c24xx-pcm-audio",
 },
 };
 
 static struct snd_soc_card neo1973_gta02 = {
 	.name = "neo1973-gta02",
-	.platform = &s3c24xx_soc_platform,
 	.dai_link = neo1973_gta02_dai,
 	.num_links = ARRAY_SIZE(neo1973_gta02_dai),
-};
-
-static struct snd_soc_device neo1973_gta02_snd_devdata = {
-	.card = &neo1973_gta02,
-	.codec_dev = &soc_codec_dev_wm8753,
 };
 
 static struct platform_device *neo1973_gta02_snd_device;
@@ -435,18 +434,18 @@ static int __init neo1973_gta02_init(void)
 		return -ENODEV;
 	}
 
-	/* register bluetooth DAI here */
-	ret = snd_soc_register_dai(&bt_dai);
-	if (ret)
-		return ret;
-
 	neo1973_gta02_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!neo1973_gta02_snd_device)
 		return -ENOMEM;
 
-	platform_set_drvdata(neo1973_gta02_snd_device,
-			&neo1973_gta02_snd_devdata);
-	neo1973_gta02_snd_devdata.dev = &neo1973_gta02_snd_device->dev;
+	/* register bluetooth DAI here */
+	ret = snd_soc_register_dai(&neo1973_gta02_snd_device->dev, -1, &bt_dai);
+	if (ret) {
+		platform_device_put(neo1973_gta02_snd_device);
+		return ret;
+	}
+
+	platform_set_drvdata(neo1973_gta02_snd_device, &neo1973_gta02);
 	ret = platform_device_add(neo1973_gta02_snd_device);
 
 	if (ret) {
@@ -461,7 +460,7 @@ static int __init neo1973_gta02_init(void)
 		goto err_unregister_device;
 	}
 
-	ret = gpio_direction_output(GTA02_GPIO_AMP_HP_IN, 1);
+	ret = gpio_direction_output(GTA02_GPIO_HP_IN, 1);
 	if (ret) {
 		pr_err("gta02_wm8753: Failed to configure GPIO %d\n", GTA02_GPIO_HP_IN);
 		goto err_free_gpio_hp_in;
@@ -493,7 +492,7 @@ module_init(neo1973_gta02_init);
 
 static void __exit neo1973_gta02_exit(void)
 {
-	snd_soc_unregister_dai(&bt_dai);
+	snd_soc_unregister_dai(&neo1973_gta02_snd_device->dev, -1);
 	platform_device_unregister(neo1973_gta02_snd_device);
 	gpio_free(GTA02_GPIO_HP_IN);
 	gpio_free(GTA02_GPIO_AMP_SHUT);
