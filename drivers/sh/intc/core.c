@@ -352,6 +352,8 @@ int __init register_intc_controller(struct intc_desc *desc)
 	if (desc->force_enable)
 		intc_enable_disable_enum(desc, d, desc->force_enable, 1);
 
+	d->skip_suspend = desc->skip_syscore_suspend;
+
 	nr_intc_controllers++;
 
 	return 0;
@@ -384,6 +386,9 @@ static int intc_suspend(void)
 	list_for_each_entry(d, &intc_list, list) {
 		int irq;
 
+		if (d->skip_suspend)
+			continue;
+
 		/* enable wakeup irqs belonging to this intc controller */
 		for_each_active_irq(irq) {
 			struct irq_data *data;
@@ -406,6 +411,9 @@ static void intc_resume(void)
 
 	list_for_each_entry(d, &intc_list, list) {
 		int irq;
+
+		if (d->skip_suspend)
+			continue;
 
 		for_each_active_irq(irq) {
 			struct irq_data *data;
