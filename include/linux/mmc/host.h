@@ -144,6 +144,11 @@ struct mmc_host_ops {
 struct mmc_card;
 struct device;
 
+struct mmc_hotplug {
+	unsigned int irq;
+	void *handler_priv;
+};
+
 struct mmc_host {
 	struct device		*parent;
 	struct device		class_dev;
@@ -261,6 +266,7 @@ struct mmc_host {
 	int			claim_cnt;	/* "claim" nesting count */
 
 	struct delayed_work	detect;
+	struct mmc_hotplug	hotplug;
 
 	const struct mmc_bus_ops *bus_ops;	/* current bus driver */
 	unsigned int		bus_refs;	/* reference counter */
