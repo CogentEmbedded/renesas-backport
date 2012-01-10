@@ -503,7 +503,7 @@ static struct resource sh7372_dmae0_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		/* DMA error IRQ */
+		.name	= "error_irq",
 		.start	= evt2irq(0x20c0),
 		.end	= evt2irq(0x20c0),
 		.flags	= IORESOURCE_IRQ,
@@ -531,7 +531,7 @@ static struct resource sh7372_dmae1_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		/* DMA error IRQ */
+		.name	= "error_irq",
 		.start	= evt2irq(0x21c0),
 		.end	= evt2irq(0x21c0),
 		.flags	= IORESOURCE_IRQ,
@@ -559,7 +559,7 @@ static struct resource sh7372_dmae2_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		/* DMA error IRQ */
+		.name	= "error_irq",
 		.start	= evt2irq(0x22c0),
 		.end	= evt2irq(0x22c0),
 		.flags	= IORESOURCE_IRQ,
