@@ -71,6 +71,10 @@ config MACH_MACKEREL
 
 comment "SH-Mobile System Configuration"
 
+config CPU_HAS_INTEVT
+        bool
+	default y
+
 menu "Memory configuration"
 
 config MEMORY_START
