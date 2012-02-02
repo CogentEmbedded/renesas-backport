@@ -169,35 +169,35 @@ static struct platform_device scif6_device = {
 };
 
 /* CMT */
-static struct sh_timer_config cmt10_platform_data = {
-	.name = "CMT10",
-	.channel_offset = 0x10,
-	.timer_bit = 0,
+static struct sh_timer_config cmt2_platform_data = {
+	.name = "CMT2",
+	.channel_offset = 0x40,
+	.timer_bit = 5,
 	.clockevent_rating = 125,
 	.clocksource_rating = 125,
 };
 
-static struct resource cmt10_resources[] = {
+static struct resource cmt2_resources[] = {
 	[0] = {
-		.name	= "CMT10",
-		.start	= 0xe6138010,
-		.end	= 0xe613801b,
+		.name	= "CMT2",
+		.start	= 0xe6130040,
+		.end	= 0xe613004b,
 		.flags	= IORESOURCE_MEM,
 	},
 	[1] = {
-		.start	= evt2irq(0x0b00), /* CMT1_CMT10 */
+		.start	= evt2irq(0x0b80), /* CMT2 */
 		.flags	= IORESOURCE_IRQ,
 	},
 };
 
-static struct platform_device cmt10_device = {
+static struct platform_device cmt2_device = {
 	.name		= "sh_cmt",
-	.id		= 10,
+	.id		= 2,
 	.dev = {
-		.platform_data	= &cmt10_platform_data,
+		.platform_data	= &cmt2_platform_data,
 	},
-	.resource	= cmt10_resources,
-	.num_resources	= ARRAY_SIZE(cmt10_resources),
+	.resource	= cmt2_resources,
+	.num_resources	= ARRAY_SIZE(cmt2_resources),
 };
 
 /* TMU */
@@ -503,7 +503,7 @@ static struct resource sh7372_dmae0_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		/* DMA error IRQ */
+		.name	= "error_irq",
 		.start	= evt2irq(0x20c0),
 		.end	= evt2irq(0x20c0),
 		.flags	= IORESOURCE_IRQ,
@@ -531,7 +531,7 @@ static struct resource sh7372_dmae1_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		/* DMA error IRQ */
+		.name	= "error_irq",
 		.start	= evt2irq(0x21c0),
 		.end	= evt2irq(0x21c0),
 		.flags	= IORESOURCE_IRQ,
@@ -559,7 +559,7 @@ static struct resource sh7372_dmae2_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		/* DMA error IRQ */
+		.name	= "error_irq",
 		.start	= evt2irq(0x22c0),
 		.end	= evt2irq(0x22c0),
 		.flags	= IORESOURCE_IRQ,
@@ -818,7 +818,7 @@ static struct platform_device *sh7372_early_devices[] __initdata = {
 	&scif4_device,
 	&scif5_device,
 	&scif6_device,
-	&cmt10_device,
+	&cmt2_device,
 	&tmu00_device,
 	&tmu01_device,
 };
