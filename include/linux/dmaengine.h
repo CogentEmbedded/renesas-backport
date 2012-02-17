@@ -23,7 +23,7 @@
 
 #include <linux/device.h>
 #include <linux/uio.h>
-#include <linux/dma-direction.h>
+#include <linux/dma-mapping.h>
 
 struct scatterlist;
 
