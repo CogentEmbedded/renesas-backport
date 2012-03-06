@@ -32,8 +32,10 @@
 #include <linux/sh_timer.h>
 #include <mach/hardware.h>
 #include <mach/sh7372.h>
+#include <mach/common.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
+#include <asm/mach/time.h>
 
 /* SCIFA0 */
 static struct plat_sci_port scif0_platform_data = {
@@ -848,8 +850,17 @@ void __init sh7372_add_standard_devices(void)
 			    ARRAY_SIZE(sh7372_late_devices));
 }
 
+static void __init sh7372_earlytimer_init(void)
+{
+	sh7372_clock_init();
+	shmobile_earlytimer_init();
+}
+
 void __init sh7372_add_early_devices(void)
 {
 	early_platform_add_devices(sh7372_early_devices,
 				   ARRAY_SIZE(sh7372_early_devices));
+
+	/* override timer setup with soc-specific code */
+	shmobile_timer.init = sh7372_earlytimer_init;
 }
