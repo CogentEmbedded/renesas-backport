@@ -37,6 +37,7 @@
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 #include <asm/mach/arch.h>
+#include <asm/mach/time.h>
 
 static struct map_desc sh73a0_io_desc[] __initdata = {
 	/* create a 1:1 entity map for 0xe6xxxxxx
@@ -687,6 +688,12 @@ void __init sh73a0_add_standard_devices(void)
 			    ARRAY_SIZE(sh73a0_late_devices));
 }
 
+static void __init sh73a0_earlytimer_init(void)
+{
+	sh73a0_clock_init();
+	shmobile_earlytimer_init();
+}
+
 void __init sh73a0_add_early_devices(void)
 {
 	early_platform_add_devices(sh73a0_early_devices,
@@ -694,4 +701,7 @@ void __init sh73a0_add_early_devices(void)
 
 	/* setup early console here as well */
 	shmobile_setup_console();
+
+	/* override timer setup with soc-specific code */
+	shmobile_timer.init = sh73a0_earlytimer_init;
 }

@@ -46,7 +46,6 @@
 #include <mach/common.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-#include <asm/mach/time.h>
 #include <asm/hardware/gic.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/traps.h>
@@ -536,21 +535,10 @@ static void __init ag5evm_init(void)
 	platform_add_devices(ag5evm_devices, ARRAY_SIZE(ag5evm_devices));
 }
 
-static void __init ag5evm_timer_init(void)
-{
-	sh73a0_clock_init();
-	shmobile_timer.init();
-	return;
-}
-
-struct sys_timer ag5evm_timer = {
-	.init	= ag5evm_timer_init,
-};
-
 MACHINE_START(AG5EVM, "ag5evm")
 	.map_io		= sh73a0_map_io,
 	.init_irq	= sh73a0_init_irq,
 	.handle_irq	= shmobile_handle_irq_gic,
 	.init_machine	= ag5evm_init,
-	.timer		= &ag5evm_timer,
+	.timer		= &shmobile_timer,
 MACHINE_END
