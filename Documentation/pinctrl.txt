@@ -1057,6 +1057,11 @@ requested pinctrl handles, for example if the pinctrl driver has not yet
 registered. Thus make sure that the error path in your driver gracefully
 cleans up and is ready to retry the probing later in the startup process.
 
+NOTE: the pinctrl system will return -EPROBE_DEFER if it cannot find the
+requested pinctrl handles, for example if the pinctrl driver has not yet
+registered. Thus make sure that the error path in your driver gracefully
+cleans up and is ready to retry the probing later in the startup process.
+
 
 System pin control hogging
 ==========================
