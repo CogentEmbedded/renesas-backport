@@ -21,6 +21,7 @@
 #include <linux/gpio.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/i2c.h>
 #include <linux/platform_device.h>
 #include <linux/videodev2.h>
 #include <mach/irqs.h>
@@ -83,6 +84,13 @@ static struct platform_device lcdc_device = {
 	.dev	= {
 		.platform_data	= &lcdc_info,
 		.coherent_dma_mask = ~0,
+	},
+};
+
+static struct i2c_board_info i2c1_devices[] = {
+	{
+		I2C_BOARD_INFO("st1232-ts", 0x55),
+		.irq = intcs_evt2irq(0x300), /* IRQ8 */
 	},
 };
 
@@ -184,10 +192,16 @@ static void __init kzm_init(void)
 	gpio_request(GPIO_PORT222,	NULL);
 	gpio_direction_output(GPIO_PORT222, 1);
 
+	/* Touchscreen */
+	gpio_request(GPIO_PORT223, NULL); /* IRQ8 */
+	gpio_direction_input(GPIO_PORT223);
+
 #ifdef CONFIG_CACHE_L2X0
 	/* Early BRESP enable, Shared attribute override enable, 64K*8way */
 	l2x0_init(__io(0xf0100000), 0x40460000, 0x82000fff);
 #endif
+
+	i2c_register_board_info(1, i2c1_devices, ARRAY_SIZE(i2c1_devices));
 
 	sh73a0_add_standard_devices();
 	platform_add_devices(kzm_devices, ARRAY_SIZE(kzm_devices));
