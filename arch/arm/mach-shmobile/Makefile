@@ -45,6 +45,7 @@ obj-$(CONFIG_MACH_AP4EVB)	+= board-ap4evb.o
 obj-$(CONFIG_MACH_AG5EVM)	+= board-ag5evm.o
 obj-$(CONFIG_MACH_MACKEREL)	+= board-mackerel.o
 obj-$(CONFIG_MACH_ARMADILLO800EVA)	+= board-armadillo800eva.o
+obj-$(CONFIG_MACH_KZM9G)	+= board-kzm9g.o
 
 # Framework support
 obj-$(CONFIG_SMP)		+= $(smp-y)
