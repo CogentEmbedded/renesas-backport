@@ -266,3 +266,11 @@ config SERIAL_8250_RM9K
 	  Selecting this option will add support for the integrated serial
 	  port hardware found on MIPS RM9122 and similar processors.
 	  If unsure, say N.
+
+config SERIAL_8250_EM
+	tristate "Support for Emma Mobile intergrated serial port"
+	depends on SERIAL_8250 && ARM && HAVE_CLK
+	help
+	  Selecting this option will add support for the integrated serial
+	  port hardware found on the Emma Mobile line of processors.
+	  If unsure, say N.
