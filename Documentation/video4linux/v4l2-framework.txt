@@ -620,9 +620,9 @@ will be either a top-level mutex or a mutex per device node. By default this
 lock will be used for each file operation and ioctl, but you can disable
 locking for selected ioctls by calling:
 
-	void v4l2_dont_use_lock(struct video_device *vdev, unsigned int cmd);
+	void v4l2_disable_ioctl_locking(struct video_device *vdev, unsigned int cmd);
 
-E.g.: v4l2_dont_use_lock(vdev, VIDIOC_DQBUF);
+E.g.: v4l2_disable_ioctl_locking(vdev, VIDIOC_DQBUF);
 
 You have to call this before you register the video_device.
 
