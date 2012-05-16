@@ -92,6 +92,10 @@ config MACH_KZM9G
 	select ARCH_REQUIRE_GPIOLIB
 	select SND_SOC_AK4642 if SND_SIMPLE_CARD
 
+config MACH_KZM9D
+	bool "KZM9D board"
+	depends on ARCH_EMEV2
+
 comment "SH-Mobile System Configuration"
 
 config CPU_HAS_INTEVT

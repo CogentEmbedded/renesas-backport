@@ -84,6 +84,8 @@ static struct clk *main_clks[] = {
 enum { SCLKDIV_USIAU0, SCLKDIV_USIBU2, SCLKDIV_USIBU1, SCLKDIV_USIBU3,
 	SCLKDIV_NR };
 
+#define IOMEM(x)       ((void __force __iomem *)(x))
+
 #define SCLKDIV(_reg, _shift)			\
 {								\
 	.parent		= &pll3_clk,				\
