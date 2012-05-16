@@ -18,6 +18,7 @@ smp-y				:= platsmp.o headsmp.o
 smp-$(CONFIG_HOTPLUG_CPU)	+= hotplug.o
 smp-$(CONFIG_LOCAL_TIMERS)	+= localtimer.o
 smp-$(CONFIG_ARCH_SH73A0)	+= smp-sh73a0.o
+smp-$(CONFIG_ARCH_EMEV2)	+= smp-emev2.o
 
 # Pinmux setup
 pfc-y				:=
