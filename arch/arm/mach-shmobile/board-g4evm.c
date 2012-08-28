@@ -40,6 +40,8 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
+#include "sh-gpio.h"
+
 /*
  * SDHI
  *
