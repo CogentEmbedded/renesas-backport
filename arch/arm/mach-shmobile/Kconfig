@@ -2,12 +2,6 @@ if ARCH_SHMOBILE
 
 comment "SH-Mobile System Type"
 
-config ARCH_SH7367
-	bool "SH-Mobile G3 (SH7367)"
-	select CPU_V6
-	select SH_CLK_CPG
-	select ARCH_WANT_OPTIONAL_GPIOLIB
-
 config ARCH_SH7377
 	bool "SH-Mobile G4 (SH7377)"
 	select CPU_V7
