@@ -352,7 +352,7 @@ void pinctrl_add_gpio_ranges(struct pinctrl_dev *pctldev,
 }
 EXPORT_SYMBOL_GPL(pinctrl_add_gpio_ranges);
 
-struct pinctrl_dev *find_pinctrl_and_add_gpio_range(const char *devname,
+struct pinctrl_dev *pinctrl_find_and_add_gpio_range(const char *devname,
 		struct pinctrl_gpio_range *range)
 {
 	struct pinctrl_dev *pctldev = get_pinctrl_dev_from_devname(devname);
@@ -363,7 +363,7 @@ struct pinctrl_dev *find_pinctrl_and_add_gpio_range(const char *devname,
 	pinctrl_add_gpio_range(pctldev, range);
 	return pctldev;
 }
-EXPORT_SYMBOL_GPL(find_pinctrl_and_add_gpio_range);
+EXPORT_SYMBOL_GPL(pinctrl_find_and_add_gpio_range);
 
 /**
  * pinctrl_get_group_selector() - returns the group selector for a group
