@@ -126,7 +126,7 @@ extern void pinctrl_add_gpio_ranges(struct pinctrl_dev *pctldev,
 				struct pinctrl_gpio_range *ranges,
 				unsigned nranges);
 
-extern struct pinctrl_dev *find_pinctrl_and_add_gpio_range(const char *devname,
+extern struct pinctrl_dev *pinctrl_find_and_add_gpio_range(const char *devname,
 		struct pinctrl_gpio_range *range);
 
 #ifdef CONFIG_OF
