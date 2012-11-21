@@ -17,7 +17,6 @@
 #include <linux/smp.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 #include <mach/common.h>
 #include <mach/emev2.h>
