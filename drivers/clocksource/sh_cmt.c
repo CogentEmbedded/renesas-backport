@@ -648,8 +648,6 @@ static int sh_cmt_setup(struct sh_cmt_priv *p, struct platform_device *pdev)
 		goto err0;
 	}
 
-	platform_set_drvdata(pdev, p);
-
 	res = platform_get_resource(p->pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		dev_err(&p->pdev->dev, "failed to get I/O memory\n");
@@ -715,6 +713,8 @@ static int sh_cmt_setup(struct sh_cmt_priv *p, struct platform_device *pdev)
 		dev_err(&p->pdev->dev, "failed to request irq %d\n", irq);
 		goto err2;
 	}
+
+	platform_set_drvdata(pdev, p);
 
 	return 0;
 err2:
