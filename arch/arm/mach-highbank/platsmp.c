@@ -17,7 +17,6 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/io.h>
-#include <linux/irqchip/arm-gic.h>
 
 #include <asm/smp_scu.h>
 
@@ -25,12 +24,7 @@
 
 extern void secondary_startup(void);
 
-void __cpuinit platform_secondary_init(unsigned int cpu)
-{
-	gic_secondary_init(0);
-}
-
-int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
+static int __cpuinit highbank_boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	arch_send_wakeup_ipi_mask(cpumask_of(cpu));
 	return 0;

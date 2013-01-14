@@ -12,7 +12,6 @@
 
 #include <linux/init.h>
 #include <linux/smp.h>
-#include <linux/irqchip/arm-gic.h>
 #include <asm/page.h>
 #include <asm/smp_scu.h>
 #include <asm/mach/map.h>
@@ -39,16 +38,6 @@ void __init imx_scu_map_io(void)
 	iotable_init(&scu_io_desc, 1);
 
 	scu_base = IMX_IO_ADDRESS(base);
-}
-
-void __cpuinit platform_secondary_init(unsigned int cpu)
-{
-	/*
-	 * if any interrupts are already enabled for the primary
-	 * core (e.g. timer irq), then they will not have been enabled
-	 * for us: do so
-	 */
-	gic_secondary_init(0);
 }
 
 int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
