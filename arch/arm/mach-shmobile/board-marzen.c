@@ -30,6 +30,7 @@
 #include <linux/regulator/fixed.h>
 #include <linux/regulator/machine.h>
 #include <linux/smsc911x.h>
+#include <linux/platform_data/rcar-du.h>
 #include <mach/hardware.h>
 #include <mach/r8a7779.h>
 #include <mach/common.h>
@@ -75,8 +76,41 @@ static struct platform_device eth_device = {
 	.num_resources	= ARRAY_SIZE(smsc911x_resources),
 };
 
+/* DU */
+static struct resource rcar_du_resources[] = {
+	[0] = {
+		.name	= "Display Unit",
+		.start	= 0xfff80000,
+		.end	= 0xfffb1007,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= gic_spi(31),
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct rcar_du_platform_data rcar_du_pdata = {
+	.encoders = {
+		[0] = {
+			.encoder = RCAR_DU_ENCODER_VGA,
+		},
+	},
+};
+
+static struct platform_device rcar_du_device = {
+	.name		= "rcar-du",
+	.num_resources	= ARRAY_SIZE(rcar_du_resources),
+	.resource	= rcar_du_resources,
+	.dev	= {
+		.platform_data = &rcar_du_pdata,
+		.coherent_dma_mask = ~0,
+	},
+};
+
 static struct platform_device *marzen_devices[] __initdata = {
 	&eth_device,
+	&rcar_du_device,
 };
 
 static void __init marzen_init(void)
@@ -96,6 +130,37 @@ static void __init marzen_init(void)
 	/* LAN89218 */
 	gpio_request(GPIO_FN_EX_CS0, NULL); /* nCS */
 	gpio_request(GPIO_FN_IRQ1_B, NULL); /* IRQ + PME */
+
+	/* Display Unit 0 (CN10: ARGB0) */
+	gpio_request(GPIO_FN_DU0_DR7, NULL);
+	gpio_request(GPIO_FN_DU0_DR6, NULL);
+	gpio_request(GPIO_FN_DU0_DR5, NULL);
+	gpio_request(GPIO_FN_DU0_DR4, NULL);
+	gpio_request(GPIO_FN_DU0_DR3, NULL);
+	gpio_request(GPIO_FN_DU0_DR2, NULL);
+	gpio_request(GPIO_FN_DU0_DR1, NULL);
+	gpio_request(GPIO_FN_DU0_DR0, NULL);
+	gpio_request(GPIO_FN_DU0_DG7, NULL);
+	gpio_request(GPIO_FN_DU0_DG6, NULL);
+	gpio_request(GPIO_FN_DU0_DG5, NULL);
+	gpio_request(GPIO_FN_DU0_DG4, NULL);
+	gpio_request(GPIO_FN_DU0_DG3, NULL);
+	gpio_request(GPIO_FN_DU0_DG2, NULL);
+	gpio_request(GPIO_FN_DU0_DG1, NULL);
+	gpio_request(GPIO_FN_DU0_DG0, NULL);
+	gpio_request(GPIO_FN_DU0_DB7, NULL);
+	gpio_request(GPIO_FN_DU0_DB6, NULL);
+	gpio_request(GPIO_FN_DU0_DB5, NULL);
+	gpio_request(GPIO_FN_DU0_DB4, NULL);
+	gpio_request(GPIO_FN_DU0_DB3, NULL);
+	gpio_request(GPIO_FN_DU0_DB2, NULL);
+	gpio_request(GPIO_FN_DU0_DB1, NULL);
+	gpio_request(GPIO_FN_DU0_DB0, NULL);
+	gpio_request(GPIO_FN_DU0_EXVSYNC_DU0_VSYNC, NULL);
+	gpio_request(GPIO_FN_DU0_EXHSYNC_DU0_HSYNC, NULL);
+	gpio_request(GPIO_FN_DU0_DOTCLKOUT0, NULL);
+	gpio_request(GPIO_FN_DU0_DOTCLKOUT1, NULL);
+	gpio_request(GPIO_FN_DU0_DISP, NULL);
 
 	r8a7779_add_standard_devices();
 	platform_add_devices(marzen_devices, ARRAY_SIZE(marzen_devices));
