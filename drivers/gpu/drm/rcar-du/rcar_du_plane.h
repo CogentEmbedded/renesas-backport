@@ -29,7 +29,6 @@ struct rcar_du_plane {
 	bool enabled;
 
 	int hwindex;		/* 0-based, -1 means unused */
-	unsigned int alpha;
 
 	const struct rcar_du_format_info *format;
 

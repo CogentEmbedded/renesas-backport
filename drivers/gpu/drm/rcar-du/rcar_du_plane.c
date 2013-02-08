@@ -135,7 +135,8 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 	ddcr4 &= ~PnDDCR4_EDF_MASK;
 	ddcr4 |= plane->format->edf | PnDDCR4_CODE;
 
-	pnmr = PnMR_SPIM_TP_OFF | PnMR_BM_MD | plane->format->dddf;
+	/* Disable color-keying for now. */
+	pnmr = PnMR_SPIM_TP_OFF | PnMR_BM_MD | plane->format->pnmr;
 
 	/* For packed YUV formats we need to select the U/V order. */
 	if (plane->format->fourcc == DRM_FORMAT_YUYV)
@@ -160,8 +161,11 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 	rcar_du_plane_write(rcdu, index, PnDDCR2, ddcr2);
 	rcar_du_plane_write(rcdu, index, PnDDCR4, ddcr4);
 
-	/* Global alpha value */
-	rcar_du_plane_write(rcdu, index, PnALPHAR, plane->alpha);
+	/* The PnALPHAR register controls alpha-blending in 16bpp formats
+	 * (ARGB1555). Set the alpha value to 0, and enable alpha-blending when
+	 * the A bit is 0. This maps A=0 to alpha=0 and A=1 to alpha=255.
+	 */
+	rcar_du_plane_write(rcdu, index, PnALPHAR, PnALPHAR_ABIT_0);
 
 	/* Memory pitch (expressed in pixels) */
 	if (plane->format->planes == 2)
@@ -283,7 +287,6 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 
 		plane->dev = rcdu;
 		plane->hwindex = -1;
-		plane->alpha = 255;
 
 		/* Reserve one plane per CRTC */
 		if (i < ARRAY_SIZE(rcdu->crtc))
