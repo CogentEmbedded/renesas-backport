@@ -262,12 +262,10 @@
 #define PnMR_TC_R		(0 << 17)	/* Tranparent color is PnTC1R */
 #define PnMR_TC_CP		(1 << 17)	/* Tranparent color is color palette */
 #define PnMR_WAE		(1 << 16)	/* Wrap around Enable */
-#define PnMR_SPIM_TP_ON		(0 << 12)	/* Transparent Color */
-#define PnMR_SPIM_ALP_ON	(1 << 12)	/* Alpha Blending */
-#define PnMR_SPIM_EOR_ON	(2 << 12)	/* EOR */
-#define PnMR_SPIM_TP_OFF	(4 << 12)	/* No Transparent Color */
-#define PnMR_SPIM_ALP_OFF	(5 << 12)	/* Alpha Blending, No Transp. */
-#define PnMR_SPIM_EOR_OFF	(6 << 12)	/* EOR, No Transp. */
+#define PnMR_SPIM_TP		(0 << 12)	/* Transparent Color */
+#define PnMR_SPIM_ALP		(1 << 12)	/* Alpha Blending */
+#define PnMR_SPIM_EOR		(2 << 12)	/* EOR */
+#define PnMR_SPIM_TP_OFF	(1 << 14)	/* No Transparent Color */
 #define PnMR_CPSL_CP1		(0 << 8)	/* Color Palette selected 1 */
 #define PnMR_CPSL_CP2		(1 << 8)	/* Color Palette selected 2 */
 #define PnMR_CPSL_CP3		(2 << 8)	/* Color Palette selected 3 */
@@ -284,7 +282,12 @@
 #define PnMR_DDDF_MASK		(3 << 0)
 
 #define PnMWR			0x00104
+
 #define PnALPHAR		0x00108
+#define PnALPHAR_ABIT_1		(0 << 12)
+#define PnALPHAR_ABIT_0		(1 << 12)
+#define PnALPHAR_ABIT_X		(2 << 12)
+
 #define PnDSXR			0x00110
 #define PnDSYR			0x00114
 #define PnDPXR			0x00118
