@@ -49,18 +49,6 @@ static void modify_scu_cpu_psr(unsigned long set, unsigned long clr)
 
 }
 
-static unsigned int __init emev2_get_core_count(void)
-{
-	if (!scu_base) {
-		scu_base = ioremap(EMEV2_SCU_BASE, PAGE_SIZE);
-		emev2_clock_init(); /* need ioremapped SMU */
-	}
-
-	WARN_ON_ONCE(!scu_base);
-
-	return scu_base ? scu_get_core_count(scu_base) : 1;
-}
-
 static int __cpuinit emev2_boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	cpu = cpu_logical_map(cpu);
@@ -87,7 +75,14 @@ static void __init emev2_smp_prepare_cpus(unsigned int max_cpus)
 
 static void __init emev2_smp_init_cpus(void)
 {
-	unsigned int ncores = emev2_get_core_count();
+	unsigned int ncores;
+
+	if (!scu_base) {
+		scu_base = ioremap(EMEV2_SCU_BASE, PAGE_SIZE);
+		emev2_clock_init(); /* need ioremapped SMU */
+	}
+
+	ncores = scu_base ? scu_get_core_count(scu_base) : 1;
 
 	shmobile_smp_init_cpus(ncores);
 }
