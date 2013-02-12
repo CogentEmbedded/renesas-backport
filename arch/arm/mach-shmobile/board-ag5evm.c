@@ -371,7 +371,7 @@ static struct sh_mobile_sdhi_info sdhi0_info = {
 	.tmio_flags	= TMIO_MMC_HAS_IDLE_WAIT | TMIO_MMC_USE_GPIO_CD,
 	.tmio_caps	= MMC_CAP_SD_HIGHSPEED,
 	.tmio_ocr_mask	= MMC_VDD_27_28 | MMC_VDD_28_29,
-	.cd_gpio	= GPIO_PORT251,
+	.cd_gpio	= 251,
 };
 
 static struct resource sdhi0_resources[] = {
@@ -410,7 +410,7 @@ static struct platform_device sdhi0_device = {
 
 void ag5evm_sdhi1_set_pwr(struct platform_device *pdev, int state)
 {
-	gpio_set_value(GPIO_PORT114, state);
+	gpio_set_value(114, state);
 }
 
 static struct sh_mobile_sdhi_info sh_sdhi1_info = {
@@ -513,11 +513,11 @@ static void __init ag5evm_init(void)
 	gpio_request(GPIO_FN_MMCD0_5_PU, NULL);
 	gpio_request(GPIO_FN_MMCD0_6_PU, NULL);
 	gpio_request(GPIO_FN_MMCD0_7_PU, NULL);
-	gpio_request_one(GPIO_PORT208, GPIOF_OUT_INIT_HIGH, NULL); /* Reset */
+	gpio_request_one(208, GPIOF_OUT_INIT_HIGH, NULL); /* Reset */
 
 	/* enable SMSC911X */
-	gpio_request_one(GPIO_PORT144, GPIOF_IN, NULL); /* PINTA2 */
-	gpio_request_one(GPIO_PORT145, GPIOF_OUT_INIT_HIGH, NULL); /* RESET */
+	gpio_request_one(144, GPIOF_IN, NULL); /* PINTA2 */
+	gpio_request_one(145, GPIOF_OUT_INIT_HIGH, NULL); /* RESET */
 
 	/* FSI A */
 	gpio_request(GPIO_FN_FSIACK, NULL);
@@ -532,13 +532,13 @@ static void __init ag5evm_init(void)
 	gpio_request(GPIO_FN_PORT243_IRDA_FIRSEL, NULL);
 
 	/* LCD panel */
-	gpio_request_one(GPIO_PORT217, GPIOF_OUT_INIT_LOW, NULL); /* RESET */
+	gpio_request_one(217, GPIOF_OUT_INIT_LOW, NULL); /* RESET */
 	mdelay(1);
-	gpio_set_value(GPIO_PORT217, 1);
+	gpio_set_value(217, 1);
 	mdelay(100);
 
 	/* LCD backlight controller */
-	gpio_request_one(GPIO_PORT235, GPIOF_OUT_INIT_LOW, NULL); /* RESET */
+	gpio_request_one(235, GPIOF_OUT_INIT_LOW, NULL); /* RESET */
 	lcd_backlight_reset();
 
 	/* enable SDHI0 on CN15 [SD I/F] */
