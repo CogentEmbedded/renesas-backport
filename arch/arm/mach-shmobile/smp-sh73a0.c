@@ -48,13 +48,6 @@ void __init sh73a0_register_twd(void)
 }
 #endif
 
-static unsigned int __init sh73a0_get_core_count(void)
-{
-	void __iomem *scu_base = scu_base_addr();
-
-	return scu_get_core_count(scu_base);
-}
-
 static int __cpuinit sh73a0_boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	cpu = cpu_logical_map(cpu);
@@ -81,7 +74,7 @@ static void __init sh73a0_smp_prepare_cpus(unsigned int max_cpus)
 
 static void __init sh73a0_smp_init_cpus(void)
 {
-	unsigned int ncores = sh73a0_get_core_count();
+	unsigned int ncores = scu_get_core_count(scu_base_addr());
 
 	shmobile_smp_init_cpus(ncores);
 }
