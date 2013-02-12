@@ -61,29 +61,6 @@ static unsigned int __init emev2_get_core_count(void)
 	return scu_base ? scu_get_core_count(scu_base) : 1;
 }
 
-static int emev2_platform_cpu_kill(unsigned int cpu)
-{
-	return 0; /* not supported yet */
-}
-
-static int __maybe_unused emev2_cpu_kill(unsigned int cpu)
-{
-	int k;
-
-	/* this function is running on another CPU than the offline target,
-	 * here we need wait for shutdown code in platform_cpu_die() to
-	 * finish before asking SoC-specific code to power off the CPU core.
-	 */
-	for (k = 0; k < 1000; k++) {
-		if (shmobile_cpu_is_dead(cpu))
-			return emev2_platform_cpu_kill(cpu);
-		mdelay(1);
-	}
-
-	return 0;
-}
-
-
 static int __cpuinit emev2_boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	cpu = cpu_logical_map(cpu);
@@ -119,9 +96,4 @@ struct smp_operations emev2_smp_ops __initdata = {
 	.smp_init_cpus		= emev2_smp_init_cpus,
 	.smp_prepare_cpus	= emev2_smp_prepare_cpus,
 	.smp_boot_secondary	= emev2_boot_secondary,
-#ifdef CONFIG_HOTPLUG_CPU
-	.cpu_kill		= emev2_cpu_kill,
-	.cpu_die		= shmobile_cpu_die,
-	.cpu_disable		= shmobile_cpu_disable,
-#endif
 };
