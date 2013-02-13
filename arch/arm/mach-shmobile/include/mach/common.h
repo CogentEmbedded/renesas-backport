@@ -85,6 +85,7 @@ extern int shmobile_cpu_is_dead(unsigned int cpu);
 static inline int shmobile_cpu_is_dead(unsigned int cpu) { return 1; }
 #endif
 
+extern void __iomem *shmobile_scu_base;
 extern void shmobile_smp_init_cpus(unsigned int ncores);
 
 #endif /* __ARCH_MACH_COMMON_H */
