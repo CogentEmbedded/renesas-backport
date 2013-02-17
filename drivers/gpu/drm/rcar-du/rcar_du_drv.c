@@ -181,7 +181,8 @@ static const struct file_operations rcar_du_fops = {
 };
 
 static struct drm_driver rcar_du_driver = {
-	.driver_features	= DRIVER_HAVE_IRQ | DRIVER_GEM | DRIVER_MODESET,
+	.driver_features	= DRIVER_HAVE_IRQ | DRIVER_GEM | DRIVER_MODESET
+				| DRIVER_PRIME,
 	.load			= rcar_du_load,
 	.unload			= rcar_du_unload,
 	.preclose		= rcar_du_preclose,
@@ -191,6 +192,10 @@ static struct drm_driver rcar_du_driver = {
 	.disable_vblank		= rcar_du_disable_vblank,
 	.gem_free_object	= drm_gem_cma_free_object,
 	.gem_vm_ops		= &drm_gem_cma_vm_ops,
+	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
+	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
+	.gem_prime_import	= drm_gem_cma_dmabuf_import,
+	.gem_prime_export	= drm_gem_cma_dmabuf_export,
 	.dumb_create		= drm_gem_cma_dumb_create,
 	.dumb_map_offset	= drm_gem_cma_dumb_map_offset,
 	.dumb_destroy		= drm_gem_cma_dumb_destroy,
