@@ -212,13 +212,8 @@ static const struct drm_encoder_helper_funcs encoder_helper_funcs = {
 	.mode_set = rcar_du_lvds_encoder_mode_set,
 };
 
-static void rcar_du_lvds_encoder_destroy(struct drm_encoder *encoder)
-{
-	drm_encoder_cleanup(encoder);
-}
-
 static const struct drm_encoder_funcs encoder_funcs = {
-	.destroy = rcar_du_lvds_encoder_destroy,
+	.destroy = drm_encoder_cleanup,
 };
 
 int rcar_du_lvds_init(struct rcar_du_device *rcdu,
