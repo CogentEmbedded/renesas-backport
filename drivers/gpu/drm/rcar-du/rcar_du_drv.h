@@ -34,10 +34,12 @@ struct rcar_du_device {
 
 	struct drm_device *ddev;
 
-	struct rcar_du_crtc crtc[1];
+	struct rcar_du_crtc crtcs[2];
+	unsigned int used_crtcs;
+	unsigned int num_crtcs;
 
 	struct {
-		struct rcar_du_plane planes[8];
+		struct rcar_du_plane planes[RCAR_DU_NUM_SW_PLANES];
 		unsigned int free;
 		struct mutex lock;
 
