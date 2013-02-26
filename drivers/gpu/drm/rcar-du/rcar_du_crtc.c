@@ -393,10 +393,10 @@ static int rcar_du_crtc_page_flip(struct drm_crtc *crtc,
 
 	if (event) {
 		event->pipe = 0;
+		drm_vblank_get(dev, 0);
 		spin_lock_irqsave(&dev->event_lock, flags);
 		rcrtc->event = event;
 		spin_unlock_irqrestore(&dev->event_lock, flags);
-		drm_vblank_get(dev, 0);
 	}
 
 	return 0;
