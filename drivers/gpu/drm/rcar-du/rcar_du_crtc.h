@@ -42,6 +42,7 @@ void rcar_du_crtc_cancel_page_flip(struct rcar_du_crtc *rcrtc,
 				   struct drm_file *file);
 void rcar_du_crtc_suspend(struct rcar_du_crtc *rcrtc);
 void rcar_du_crtc_resume(struct rcar_du_crtc *rcrtc);
-void rcar_du_crtc_enable_plane(struct rcar_du_plane *plane, bool enable);
+
+void rcar_du_crtc_update_planes(struct drm_crtc *crtc);
 
 #endif /* __RCAR_DU_CRTC_H__ */
