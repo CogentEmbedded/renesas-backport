@@ -22,6 +22,10 @@
 #include "rcar_du_plane.h"
 #include "rcar_du_regs.h"
 
+#define RCAR_DU_COLORKEY_NONE		(0 << 24)
+#define RCAR_DU_COLORKEY_SOURCE		(1 << 24)
+#define RCAR_DU_COLORKEY_MASK		(1 << 24)
+
 static u32 rcar_du_plane_read(struct rcar_du_device *rcdu,
 			      unsigned int index, u32 reg)
 {
@@ -115,13 +119,57 @@ void rcar_du_plane_compute_base(struct rcar_du_plane *plane,
 	}
 }
 
+static void rcar_du_plane_setup_mode(struct rcar_du_plane *plane,
+				     unsigned int index)
+{
+	struct rcar_du_device *rcdu = plane->dev;
+	u32 colorkey;
+	u32 pnmr;
+
+	pnmr = PnMR_BM_MD | plane->format->pnmr;
+
+	/* Disable color keying when requested. YUV formats have the
+	 * PnMR_SPIM_TP_OFF bit set in their pnmr field, disabling color keying
+	 * automatically.
+	 */
+	if ((plane->colorkey & RCAR_DU_COLORKEY_MASK) == RCAR_DU_COLORKEY_NONE)
+		pnmr |= PnMR_SPIM_TP_OFF;
+
+	/* For packed YUV formats we need to select the U/V order. */
+	if (plane->format->fourcc == DRM_FORMAT_YUYV)
+		pnmr |= PnMR_YCDF_YUYV;
+
+	rcar_du_plane_write(rcdu, index, PnMR, pnmr);
+
+	switch (plane->format->fourcc) {
+	case DRM_FORMAT_RGB565:
+		colorkey = ((plane->colorkey & 0xf80000) >> 8)
+			 | ((plane->colorkey & 0x00fc00) >> 5)
+			 | ((plane->colorkey & 0x0000f8) >> 3);
+		rcar_du_plane_write(rcdu, index, PnTC2R, colorkey);
+		break;
+
+	case DRM_FORMAT_ARGB1555:
+		colorkey = ((plane->colorkey & 0xf80000) >> 9)
+			 | ((plane->colorkey & 0x00f800) >> 6)
+			 | ((plane->colorkey & 0x0000f8) >> 3);
+		rcar_du_plane_write(rcdu, index, PnTC2R, colorkey);
+		break;
+
+	case DRM_FORMAT_XRGB8888:
+	case DRM_FORMAT_ARGB8888:
+		rcar_du_plane_write(rcdu, index, PnTC3R,
+				    PnTC3R_CODE | (plane->colorkey & 0xffffff));
+		break;
+	}
+}
+
 static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 				  unsigned int index)
 {
 	struct rcar_du_device *rcdu = plane->dev;
 	u32 ddcr2 = PnDDCR2_CODE;
 	u32 ddcr4;
-	u32 pnmr;
 	u32 mwr;
 
 	/* Data format
@@ -133,12 +181,7 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 	ddcr4 &= ~PnDDCR4_EDF_MASK;
 	ddcr4 |= plane->format->edf | PnDDCR4_CODE;
 
-	/* Disable color-keying for now. */
-	pnmr = PnMR_SPIM_TP_OFF | PnMR_BM_MD | plane->format->pnmr;
-
-	/* For packed YUV formats we need to select the U/V order. */
-	if (plane->format->fourcc == DRM_FORMAT_YUYV)
-		pnmr |= PnMR_YCDF_YUYV;
+	rcar_du_plane_setup_mode(plane, index);
 
 	if (plane->format->planes == 2) {
 		if (plane->hwindex != index) {
@@ -155,7 +198,6 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 		}
 	}
 
-	rcar_du_plane_write(rcdu, index, PnMR, pnmr);
 	rcar_du_plane_write(rcdu, index, PnDDCR2, ddcr2);
 	rcar_du_plane_write(rcdu, index, PnDDCR4, ddcr4);
 
@@ -272,6 +314,42 @@ static int rcar_du_plane_disable(struct drm_plane *plane)
 	return 0;
 }
 
+static void rcar_du_plane_set_colorkey(struct rcar_du_plane *plane,
+				       u32 colorkey)
+{
+	if (plane->colorkey == colorkey)
+		return;
+
+	plane->colorkey = colorkey;
+	if (!plane->enabled)
+		return;
+
+	/* Both the .set_property and the .update_plane operations are called
+	 * with the mode_config lock held. There is this no need to explicitly
+	 * protect access to the colorkey field and the mode register.
+	 */
+	rcar_du_plane_setup_mode(plane, plane->hwindex);
+}
+
+static void rcar_du_plane_set_zpos(struct rcar_du_plane *plane,
+				   unsigned int zpos)
+{
+	struct rcar_du_device *rcdu = plane->dev;
+
+	mutex_lock(&rcdu->planes.lock);
+	if (plane->zpos == zpos)
+		goto done;
+
+	plane->zpos = zpos;
+	if (!plane->enabled)
+		goto done;
+
+	rcar_du_crtc_update_planes(plane->crtc);
+
+done:
+	mutex_unlock(&rcdu->planes.lock);
+}
+
 static int rcar_du_plane_set_property(struct drm_plane *plane,
 				      struct drm_property *property,
 				      uint64_t value)
@@ -279,21 +357,13 @@ static int rcar_du_plane_set_property(struct drm_plane *plane,
 	struct rcar_du_device *rcdu = plane->dev->dev_private;
 	struct rcar_du_plane *rplane = to_rcar_plane(plane);
 
-	if (property != rcdu->planes.zpos)
+	if (property == rcdu->planes.colorkey)
+		rcar_du_plane_set_colorkey(rplane, value);
+	else if (property == rcdu->planes.zpos)
+		rcar_du_plane_set_zpos(rplane, value);
+	else
 		return -EINVAL;
 
-	mutex_lock(&rcdu->planes.lock);
-	if (rplane->zpos == value)
-		goto done;
-
-	rplane->zpos = value;
-	if (!rplane->enabled)
-		goto done;
-
-	rcar_du_crtc_update_planes(rplane->crtc);
-
-done:
-	mutex_unlock(&rcdu->planes.lock);
 	return 0;
 }
 
@@ -324,6 +394,16 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 	mutex_init(&rcdu->planes.lock);
 	rcdu->planes.free = 0xff;
 
+	/* The color key is expressed as an RGB888 triplet stored in a 32-bit
+	 * integer in XRGB8888 format. Bit 24 is used as a flag to disable (0)
+	 * or enable source color keying (1).
+	 */
+	rcdu->planes.colorkey =
+		drm_property_create_range(rcdu->ddev, 0, "colorkey",
+					  0, 0x01ffffff);
+	if (rcdu->planes.colorkey == NULL)
+		return -ENOMEM;
+
 	rcdu->planes.zpos =
 		drm_property_create_range(rcdu->ddev, 0, "zpos",
 					  ARRAY_SIZE(rcdu->crtc),
@@ -336,6 +416,7 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 
 		plane->dev = rcdu;
 		plane->hwindex = -1;
+		plane->colorkey = RCAR_DU_COLORKEY_NONE;
 		plane->zpos = 1;
 
 		/* Reserve one plane per CRTC */
@@ -350,6 +431,9 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 		if (ret < 0)
 			return ret;
 
+		drm_object_attach_property(&plane->plane.base,
+					   rcdu->planes.colorkey,
+					   RCAR_DU_COLORKEY_NONE);
 		drm_object_attach_property(&plane->plane.base,
 					   rcdu->planes.zpos, 1);
 
