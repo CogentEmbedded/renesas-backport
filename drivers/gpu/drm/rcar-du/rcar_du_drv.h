@@ -41,6 +41,7 @@ struct rcar_du_device {
 		unsigned int free;
 		struct mutex lock;
 
+		struct drm_property *colorkey;
 		struct drm_property *zpos;
 	} planes;
 };
