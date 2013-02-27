@@ -40,6 +40,8 @@ struct rcar_du_device {
 		struct rcar_du_plane planes[8];
 		unsigned int free;
 		struct mutex lock;
+
+		struct drm_property *zpos;
 	} planes;
 };
 
