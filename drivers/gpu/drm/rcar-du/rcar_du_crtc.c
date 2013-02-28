@@ -173,7 +173,7 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 {
 	struct drm_crtc *crtc = &rcrtc->crtc;
 	struct rcar_du_device *rcdu = crtc->dev->dev_private;
-	struct drm_plane *plane;
+	unsigned int i;
 
 	if (rcrtc->started)
 		return;
@@ -198,7 +198,6 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	rcar_du_write(rcdu, DORCR, DORCR_DPRS);
 
 	rcar_du_crtc_set_display_timing(rcrtc);
-	rcar_du_plane_setup(rcrtc->plane);
 
 	mutex_lock(&rcdu->planes.lock);
 	rcrtc->plane->enabled = true;
@@ -206,13 +205,13 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	mutex_unlock(&rcdu->planes.lock);
 
 	/* Setup planes. */
-	list_for_each_entry(plane, &rcdu->ddev->mode_config.plane_list, head) {
-		struct rcar_du_plane *rplane = to_rcar_plane(plane);
+	for (i = 0; i < ARRAY_SIZE(rcdu->planes.planes); ++i) {
+		struct rcar_du_plane *plane = &rcdu->planes.planes[i];
 
-		if (plane->crtc != crtc)
+		if (plane->crtc != crtc || !plane->enabled)
 			continue;
 
-		rcar_du_plane_setup(rplane);
+		rcar_du_plane_setup(plane);
 	}
 
 	rcar_du_crtc_start_stop(rcrtc, true);
