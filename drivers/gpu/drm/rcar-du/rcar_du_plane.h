@@ -14,16 +14,12 @@
 #ifndef __RCAR_DU_PLANE_H__
 #define __RCAR_DU_PLANE_H__
 
-#include <drm/drmP.h>
-#include <drm/drm_crtc.h>
-
+struct drm_crtc;
 struct drm_framebuffer;
 struct rcar_du_device;
 struct rcar_du_format_info;
 
 struct rcar_du_plane {
-	struct drm_plane plane;
-
 	struct rcar_du_device *dev;
 	struct drm_crtc *crtc;
 
@@ -47,9 +43,8 @@ struct rcar_du_plane {
 	unsigned int dst_y;
 };
 
-#define to_rcar_plane(p)	container_of(p, struct rcar_du_plane, plane)
-
 int rcar_du_plane_init(struct rcar_du_device *rcdu);
+int rcar_du_plane_register(struct rcar_du_device *rcdu);
 void rcar_du_plane_setup(struct rcar_du_plane *plane);
 void rcar_du_plane_update_base(struct rcar_du_plane *plane);
 void rcar_du_plane_compute_base(struct rcar_du_plane *plane,
