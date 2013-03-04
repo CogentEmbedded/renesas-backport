@@ -80,7 +80,8 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 
 	/* Signal polarities */
 	value = ((mode->flags & DRM_MODE_FLAG_PVSYNC) ? 0 : DSMR_VSL)
-	      | ((mode->flags & DRM_MODE_FLAG_PHSYNC) ? 0 : DSMR_HSL);
+	      | ((mode->flags & DRM_MODE_FLAG_PHSYNC) ? 0 : DSMR_HSL)
+	      | DSMR_DIPM_DE;
 	rcar_du_crtc_write(rcrtc, DSMR, value);
 
 	/* Display timings */
@@ -97,6 +98,9 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 	rcar_du_crtc_write(rcrtc, VSPR, mode->vtotal - mode->vsync_end +
 					mode->vsync_start - 1);
 	rcar_du_crtc_write(rcrtc, VCR,  mode->vtotal - 1);
+
+	rcar_du_crtc_write(rcrtc, DESR,  mode->htotal - mode->hsync_start);
+	rcar_du_crtc_write(rcrtc, DEWR,  mode->hdisplay);
 }
 
 static void rcar_du_crtc_start_stop(struct rcar_du_crtc *rcrtc, bool start)
