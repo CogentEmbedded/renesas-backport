@@ -41,7 +41,7 @@ struct rcar_du_encoder_data {
 	union {
 		struct rcar_du_encoder_lvds_data lvds;
 		struct rcar_du_encoder_vga_data vga;
-	};
+	} u;
 };
 
 struct rcar_du_platform_data {

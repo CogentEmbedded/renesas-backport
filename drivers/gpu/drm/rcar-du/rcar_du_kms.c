@@ -164,11 +164,11 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 
 		switch (pdata->encoder) {
 		case RCAR_DU_ENCODER_VGA:
-			rcar_du_vga_init(rcdu, &pdata->vga, i);
+			rcar_du_vga_init(rcdu, &pdata->u.vga, i);
 			break;
 
 		case RCAR_DU_ENCODER_LVDS:
-			rcar_du_lvds_init(rcdu, &pdata->lvds, i);
+			rcar_du_lvds_init(rcdu, &pdata->u.lvds, i);
 			break;
 
 		default:
