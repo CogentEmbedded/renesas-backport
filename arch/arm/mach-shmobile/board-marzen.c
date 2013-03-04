@@ -90,10 +90,32 @@ static struct resource rcar_du_resources[] = {
 	},
 };
 
+/* The panel only specifies the [hv]display and [hv]total values. The position
+ * and width of the sync pulses don't matter, they're copied from VESA timings.
+ */
 static struct rcar_du_platform_data rcar_du_pdata = {
 	.encoders = {
 		[0] = {
 			.encoder = RCAR_DU_ENCODER_VGA,
+		},
+		[1] = {
+			.encoder = RCAR_DU_ENCODER_LVDS,
+			.u.lvds.panel = {
+				.width_mm = 210,
+				.height_mm = 158,
+				.mode = {
+					.clock = 65000,
+					.hdisplay = 1024,
+					.hsync_start = 1048,
+					.hsync_end = 1184,
+					.htotal = 1344,
+					.vdisplay = 768,
+					.vsync_start = 771,
+					.vsync_end = 777,
+					.vtotal = 806,
+					.flags = 0,
+				},
+			},
 		},
 	},
 };
@@ -161,6 +183,35 @@ static void __init marzen_init(void)
 	gpio_request(GPIO_FN_DU0_DOTCLKOUT0, NULL);
 	gpio_request(GPIO_FN_DU0_DOTCLKOUT1, NULL);
 	gpio_request(GPIO_FN_DU0_DISP, NULL);
+
+	gpio_request(GPIO_FN_DU1_DR7, NULL);
+	gpio_request(GPIO_FN_DU1_DR6, NULL);
+	gpio_request(GPIO_FN_DU1_DR5, NULL);
+	gpio_request(GPIO_FN_DU1_DR4, NULL);
+	gpio_request(GPIO_FN_DU1_DR3, NULL);
+	gpio_request(GPIO_FN_DU1_DR2, NULL);
+	gpio_request(GPIO_FN_DU1_DR1, NULL);
+	gpio_request(GPIO_FN_DU1_DR0, NULL);
+	gpio_request(GPIO_FN_DU1_DG7, NULL);
+	gpio_request(GPIO_FN_DU1_DG6, NULL);
+	gpio_request(GPIO_FN_DU1_DG5, NULL);
+	gpio_request(GPIO_FN_DU1_DG4, NULL);
+	gpio_request(GPIO_FN_DU1_DG3, NULL);
+	gpio_request(GPIO_FN_DU1_DG2, NULL);
+	gpio_request(GPIO_FN_DU1_DG1, NULL);
+	gpio_request(GPIO_FN_DU1_DG0, NULL);
+	gpio_request(GPIO_FN_DU1_DB7, NULL);
+	gpio_request(GPIO_FN_DU1_DB6, NULL);
+	gpio_request(GPIO_FN_DU1_DB5, NULL);
+	gpio_request(GPIO_FN_DU1_DB4, NULL);
+	gpio_request(GPIO_FN_DU1_DB3, NULL);
+	gpio_request(GPIO_FN_DU1_DB2, NULL);
+	gpio_request(GPIO_FN_DU1_DB1, NULL);
+	gpio_request(GPIO_FN_DU1_DB0, NULL);
+	gpio_request(GPIO_FN_DU1_EXVSYNC_DU1_VSYNC, NULL);
+	gpio_request(GPIO_FN_DU1_EXHSYNC_DU1_HSYNC, NULL);
+	gpio_request(GPIO_FN_DU1_DOTCLKOUT, NULL);
+	gpio_request(GPIO_FN_DU1_DISP, NULL);
 
 	r8a7779_add_standard_devices();
 	platform_add_devices(marzen_devices, ARRAY_SIZE(marzen_devices));
