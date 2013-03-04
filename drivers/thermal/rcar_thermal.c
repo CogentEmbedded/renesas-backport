@@ -364,6 +364,7 @@ static int rcar_thermal_probe(struct platform_device *pdev)
 	struct resource *res, *irq;
 	int mres = 0;
 	int i;
+	int ret = -ENODEV;
 	int idle = IDLE_INTERVAL;
 
 	common = devm_kzalloc(dev, sizeof(*common), GFP_KERNEL);
@@ -439,6 +440,7 @@ static int rcar_thermal_probe(struct platform_device *pdev)
 						IDLE_INTERVAL);
 		if (IS_ERR(priv->zone)) {
 			dev_err(dev, "can't register thermal zone\n");
+			ret = PTR_ERR(priv->zone);
 			goto error_unregister;
 		}
 
@@ -458,7 +460,7 @@ error_unregister:
 	rcar_thermal_for_each_priv(priv, common)
 		thermal_zone_device_unregister(priv->zone);
 
-	return -ENODEV;
+	return ret;
 }
 
 static int rcar_thermal_remove(struct platform_device *pdev)
