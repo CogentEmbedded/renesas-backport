@@ -293,6 +293,7 @@ static int rcar_du_crtc_mode_set(struct drm_crtc *crtc,
 	struct rcar_du_device *rcdu = crtc->dev->dev_private;
 	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
 	const struct rcar_du_format_info *format;
+	int ret;
 
 	format = rcar_du_format_info(crtc->fb->pixel_format);
 	if (format == NULL) {
@@ -300,6 +301,10 @@ static int rcar_du_crtc_mode_set(struct drm_crtc *crtc,
 			crtc->fb->pixel_format);
 		return -EINVAL;
 	}
+
+	ret = rcar_du_plane_reserve(rcrtc->plane, format);
+	if (ret < 0)
+		return ret;
 
 	rcrtc->plane->format = format;
 	rcrtc->plane->pitch = crtc->fb->pitches[0];
@@ -311,7 +316,7 @@ static int rcar_du_crtc_mode_set(struct drm_crtc *crtc,
 
 	rcar_du_plane_compute_base(rcrtc->plane, crtc->fb);
 
-	return rcar_du_plane_reserve(rcrtc->plane);
+	return 0;
 }
 
 static void rcar_du_crtc_mode_commit(struct drm_crtc *crtc)
