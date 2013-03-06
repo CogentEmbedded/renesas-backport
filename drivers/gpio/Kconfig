@@ -155,6 +155,12 @@ config GPIO_PXA
 	help
 	  Say yes here to support the PXA GPIO device
 
+config GPIO_RCAR
+        tristate "Renesas R-Car GPIO"
+        depends on ARM
+        help
+          Say yes here to support GPIO on Renesas R-Car SoCs.
+
 config GPIO_XILINX
 	bool "Xilinx GPIO support"
 	depends on PPC_OF || MICROBLAZE

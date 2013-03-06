@@ -20,9 +20,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
-#include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/gpio.h>
+#include <linux/sh_pfc.h>
 #include <mach/irqs.h>
 #include <mach/sh7372.h>
 
@@ -1632,7 +1631,7 @@ static struct pinmux_irq pinmux_irqs[] = {
 	PINMUX_IRQ(EXT_IRQ16H(31), PORT138_FN0, PORT184_FN0),
 };
 
-static struct pinmux_info sh7372_pinmux_info = {
+struct sh_pfc_soc_info sh7372_pinmux_info = {
 	.name = "sh7372_pfc",
 	.reserved_id = PINMUX_RESERVED,
 	.data = { PINMUX_DATA_BEGIN, PINMUX_DATA_END },
@@ -1656,8 +1655,3 @@ static struct pinmux_info sh7372_pinmux_info = {
 	.gpio_irq = pinmux_irqs,
 	.gpio_irq_size = ARRAY_SIZE(pinmux_irqs),
 };
-
-void sh7372_pinmux_init(void)
-{
-	register_pinmux(&sh7372_pinmux_info);
-}
