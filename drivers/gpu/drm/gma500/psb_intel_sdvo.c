@@ -901,7 +901,7 @@ static bool psb_intel_sdvo_set_tv_format(struct psb_intel_sdvo *psb_intel_sdvo)
 
 static bool
 psb_intel_sdvo_set_output_timings_from_mode(struct psb_intel_sdvo *psb_intel_sdvo,
-					struct drm_display_mode *mode)
+					const struct drm_display_mode *mode)
 {
 	struct psb_intel_sdvo_dtd output_dtd;
 
@@ -918,7 +918,7 @@ psb_intel_sdvo_set_output_timings_from_mode(struct psb_intel_sdvo *psb_intel_sdv
 
 static bool
 psb_intel_sdvo_set_input_timings_for_mode(struct psb_intel_sdvo *psb_intel_sdvo,
-					struct drm_display_mode *mode,
+					const struct drm_display_mode *mode,
 					struct drm_display_mode *adjusted_mode)
 {
 	/* Reset the input timing to the screen. Assume always input 0. */
@@ -942,7 +942,7 @@ psb_intel_sdvo_set_input_timings_for_mode(struct psb_intel_sdvo *psb_intel_sdvo,
 }
 
 static bool psb_intel_sdvo_mode_fixup(struct drm_encoder *encoder,
-				  struct drm_display_mode *mode,
+				  const struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
 {
 	struct psb_intel_sdvo *psb_intel_sdvo = to_psb_intel_sdvo(encoder);
@@ -1349,7 +1349,6 @@ psb_intel_sdvo_hdmi_sink_detect(struct drm_connector *connector)
 			}
 		} else
 			status = connector_status_disconnected;
-		connector->display_info.raw_edid = NULL;
 		kfree(edid);
 	}
 
@@ -1410,7 +1409,6 @@ psb_intel_sdvo_detect(struct drm_connector *connector, bool force)
 				ret = connector_status_disconnected;
 			else
 				ret = connector_status_connected;
-			connector->display_info.raw_edid = NULL;
 			kfree(edid);
 		} else
 			ret = connector_status_connected;
@@ -1459,7 +1457,6 @@ static void psb_intel_sdvo_get_ddc_modes(struct drm_connector *connector)
 			drm_add_edid_modes(connector, edid);
 		}
 
-		connector->display_info.raw_edid = NULL;
 		kfree(edid);
 	}
 }

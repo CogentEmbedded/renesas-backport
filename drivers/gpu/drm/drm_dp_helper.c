@@ -30,6 +30,15 @@
 #include "drm_dp_helper.h"
 #include "drmP.h"
 
+/**
+ * DOC: dp helpers
+ *
+ * These functions contain some common logic and helpers at various abstraction
+ * levels to deal with Display Port sink devices and related things like DP aux
+ * channel transfers, EDID reading over DP aux channels, decoding certain DPCD
+ * blocks, ...
+ */
+
 /* Run a single AUX_CH I2C transaction, writing/reading data as necessary */
 static int
 i2c_algo_dp_aux_transaction(struct i2c_adapter *adapter, int mode,
@@ -37,7 +46,7 @@ i2c_algo_dp_aux_transaction(struct i2c_adapter *adapter, int mode,
 {
 	struct i2c_algo_dp_aux_data *algo_data = adapter->algo_data;
 	int ret;
-	
+
 	ret = (*algo_data->aux_ch)(adapter, mode,
 				   write_byte, read_byte);
 	return ret;
@@ -182,7 +191,6 @@ i2c_dp_aux_reset_bus(struct i2c_adapter *adapter)
 {
 	(void) i2c_algo_dp_aux_address(adapter, 0, false);
 	(void) i2c_algo_dp_aux_stop(adapter, false);
-					   
 }
 
 static int
@@ -194,11 +202,23 @@ i2c_dp_aux_prepare_bus(struct i2c_adapter *adapter)
 	return 0;
 }
 
+/**
+ * i2c_dp_aux_add_bus() - register an i2c adapter using the aux ch helper
+ * @adapter: i2c adapter to register
+ *
+ * This registers an i2c adapater that uses dp aux channel as it's underlaying
+ * transport. The driver needs to fill out the &i2c_algo_dp_aux_data structure
+ * and store it in the algo_data member of the @adapter argument. This will be
+ * used by the i2c over dp aux algorithm to drive the hardware.
+ *
+ * RETURNS:
+ * 0 on success, -ERRNO on failure.
+ */
 int
 i2c_dp_aux_add_bus(struct i2c_adapter *adapter)
 {
 	int error;
-	
+
 	error = i2c_dp_aux_prepare_bus(adapter);
 	if (error)
 		return error;
@@ -206,3 +226,53 @@ i2c_dp_aux_add_bus(struct i2c_adapter *adapter)
 	return error;
 }
 EXPORT_SYMBOL(i2c_dp_aux_add_bus);
+
+/* Helpers for DP link training */
+static u8 dp_link_status(u8 link_status[DP_LINK_STATUS_SIZE], int r)
+{
+	return link_status[r - DP_LANE0_1_STATUS];
+}
+
+static u8 dp_get_lane_status(u8 link_status[DP_LINK_STATUS_SIZE],
+			     int lane)
+{
+	int i = DP_LANE0_1_STATUS + (lane >> 1);
+	int s = (lane & 1) * 4;
+	u8 l = dp_link_status(link_status, i);
+	return (l >> s) & 0xf;
+}
+
+bool drm_dp_channel_eq_ok(u8 link_status[DP_LINK_STATUS_SIZE],
+			  int lane_count)
+{
+	u8 lane_align;
+	u8 lane_status;
+	int lane;
+
+	lane_align = dp_link_status(link_status,
+				    DP_LANE_ALIGN_STATUS_UPDATED);
+	if ((lane_align & DP_INTERLANE_ALIGN_DONE) == 0)
+		return false;
+	for (lane = 0; lane < lane_count; lane++) {
+		lane_status = dp_get_lane_status(link_status, lane);
+		if ((lane_status & DP_CHANNEL_EQ_BITS) != DP_CHANNEL_EQ_BITS)
+			return false;
+	}
+	return true;
+}
+EXPORT_SYMBOL(drm_dp_channel_eq_ok);
+
+bool drm_dp_clock_recovery_ok(u8 link_status[DP_LINK_STATUS_SIZE],
+			      int lane_count)
+{
+	int lane;
+	u8 lane_status;
+
+	for (lane = 0; lane < lane_count; lane++) {
+		lane_status = dp_get_lane_status(link_status, lane);
+		if ((lane_status & DP_LANE_CR_DONE) == 0)
+			return false;
+	}
+	return true;
+}
+EXPORT_SYMBOL(drm_dp_clock_recovery_ok);

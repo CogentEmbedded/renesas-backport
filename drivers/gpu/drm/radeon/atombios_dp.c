@@ -34,7 +34,6 @@
 
 /* move these to drm_dp_helper.c/h */
 #define DP_LINK_CONFIGURATION_SIZE 9
-#define DP_LINK_STATUS_SIZE	   6
 #define DP_DPCD_SIZE	           8
 
 static char *voltage_names[] = {
@@ -318,25 +317,6 @@ static bool dp_clock_recovery_ok(u8 link_status[DP_LINK_STATUS_SIZE],
 	return true;
 }
 
-static bool dp_channel_eq_ok(u8 link_status[DP_LINK_STATUS_SIZE],
-			     int lane_count)
-{
-	u8 lane_align;
-	u8 lane_status;
-	int lane;
-
-	lane_align = dp_link_status(link_status,
-				    DP_LANE_ALIGN_STATUS_UPDATED);
-	if ((lane_align & DP_INTERLANE_ALIGN_DONE) == 0)
-		return false;
-	for (lane = 0; lane < lane_count; lane++) {
-		lane_status = dp_get_lane_status(link_status, lane);
-		if ((lane_status & DP_CHANNEL_EQ_BITS) != DP_CHANNEL_EQ_BITS)
-			return false;
-	}
-	return true;
-}
-
 static u8 dp_get_adjust_request_voltage(u8 link_status[DP_LINK_STATUS_SIZE],
 					int lane)
 
@@ -592,7 +572,7 @@ int radeon_dp_get_panel_mode(struct drm_encoder *encoder,
 }
 
 void radeon_dp_set_link_config(struct drm_connector *connector,
-			       struct drm_display_mode *mode)
+			       const struct drm_display_mode *mode)
 {
 	struct radeon_connector *radeon_connector = to_radeon_connector(connector);
 	struct radeon_connector_atom_dig *dig_connector;
@@ -654,7 +634,7 @@ bool radeon_dp_needs_link_train(struct radeon_connector *radeon_connector)
 
 	if (!radeon_dp_get_link_status(radeon_connector, link_status))
 		return false;
-	if (dp_channel_eq_ok(link_status, dig->dp_lane_count))
+	if (drm_dp_channel_eq_ok(link_status, dig->dp_lane_count))
 		return false;
 	return true;
 }
@@ -886,7 +866,7 @@ static int radeon_dp_link_train_ce(struct radeon_dp_link_train_info *dp_info)
 			break;
 		}
 
-		if (dp_channel_eq_ok(dp_info->link_status, dp_info->dp_lane_count)) {
+		if (drm_dp_channel_eq_ok(dp_info->link_status, dp_info->dp_lane_count)) {
 			channel_eq = true;
 			break;
 		}
