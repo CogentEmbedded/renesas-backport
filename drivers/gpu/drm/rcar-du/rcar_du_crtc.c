@@ -233,7 +233,7 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 		return;
 
 	/* Enable clocks before accessing the hardware. */
-	clk_enable(rcdu->clock);
+	clk_prepare_enable(rcdu->clock);
 
 	/* Enable extended features */
 	rcar_du_write(rcdu, DEFR, DEFR_CODE | DEFR_DEFE);
@@ -297,7 +297,7 @@ static void rcar_du_crtc_stop(struct rcar_du_crtc *rcrtc)
 
 	rcar_du_start_stop(rcdu, false);
 
-	clk_disable(rcdu->clock);
+	clk_disable_unprepare(rcdu->clock);
 
 	rcrtc->started = false;
 }
