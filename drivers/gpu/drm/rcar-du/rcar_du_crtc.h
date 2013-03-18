@@ -30,6 +30,7 @@ struct rcar_du_crtc {
 	bool started;
 
 	struct drm_pending_vblank_event *event;
+	unsigned int outputs;
 	int dpms;
 
 	struct rcar_du_plane *plane;
@@ -43,6 +44,7 @@ void rcar_du_crtc_cancel_page_flip(struct rcar_du_crtc *rcrtc,
 void rcar_du_crtc_suspend(struct rcar_du_crtc *rcrtc);
 void rcar_du_crtc_resume(struct rcar_du_crtc *rcrtc);
 
+void rcar_du_crtc_route_output(struct drm_crtc *crtc, unsigned int output);
 void rcar_du_crtc_update_planes(struct drm_crtc *crtc);
 
 #endif /* __RCAR_DU_CRTC_H__ */

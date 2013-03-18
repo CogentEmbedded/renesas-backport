@@ -112,6 +112,25 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 	rcar_du_crtc_write(rcrtc, DEWR,  mode->hdisplay);
 }
 
+static void rcar_du_crtc_set_routing(struct rcar_du_crtc *rcrtc)
+{
+	struct rcar_du_device *rcdu = rcrtc->crtc.dev->dev_private;
+	u32 dorcr = rcar_du_read(rcdu, DORCR);
+
+	dorcr &= ~(DORCR_PG2T | DORCR_DK2S | DORCR_PG2D_MASK);
+
+	/* Set the DU1 pins sources. Select CRTC 0 if explicitly requested and
+	 * CRTC 1 in all other cases to avoid cloning CRTC 0 to DU0 and DU1 by
+	 * default.
+	 */
+	if (rcrtc->outputs & (1 << 1) && rcrtc->index == 0)
+		dorcr |= DORCR_PG2D_DS1;
+	else
+		dorcr |= DORCR_PG2T | DORCR_DK2S | DORCR_PG2D_DS2;
+
+	rcar_du_write(rcdu, DORCR, dorcr);
+}
+
 static void __rcar_du_start_stop(struct rcar_du_device *rcdu, bool start)
 {
 	rcar_du_write(rcdu, DSYSR,
@@ -140,6 +159,16 @@ static void rcar_du_start_stop(struct rcar_du_device *rcdu, bool start)
 		if (--rcdu->used_crtcs == 0)
 			__rcar_du_start_stop(rcdu, false);
 	}
+}
+
+void rcar_du_crtc_route_output(struct drm_crtc *crtc, unsigned int output)
+{
+	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
+
+	/* Store the route from the CRTC output to the DU output. The DU will be
+	 * configured when starting the CRTC.
+	 */
+	rcrtc->outputs |= 1 << output;
 }
 
 void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
@@ -213,13 +242,6 @@ void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
 	rcar_du_write(rcdu, rcrtc->index ? DS2PR : DS1PR, dspr);
 }
 
-/*
- * rcar_du_crtc_start - Configure and start the LCDC
- * @rcrtc: the SH Mobile CRTC
- *
- * Configure and start the LCDC device. External devices (clocks, MERAM, panels,
- * ...) are not touched by this function.
- */
 static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 {
 	struct drm_crtc *crtc = &rcrtc->crtc;
@@ -236,11 +258,9 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	rcar_du_crtc_write(rcrtc, DOOR, DOOR_RGB(0, 0, 0));
 	rcar_du_crtc_write(rcrtc, BPOR, BPOR_RGB(0, 0, 0));
 
-	/* Configure output routing: enable both superposition processors */
-	rcar_du_write(rcdu, DORCR, DORCR_PG2T | DORCR_DK2S | DORCR_PG2D_DS2 |
-		      DORCR_PG1D_DS1 | DORCR_DPRS);
-
+	/* Configure display timings and output routing */
 	rcar_du_crtc_set_display_timing(rcrtc);
+	rcar_du_crtc_set_routing(rcrtc);
 
 	mutex_lock(&rcdu->planes.lock);
 	rcrtc->plane->enabled = true;
@@ -396,6 +416,8 @@ static int rcar_du_crtc_mode_set(struct drm_crtc *crtc,
 	rcrtc->plane->height = crtc->fb->height;
 
 	rcar_du_plane_compute_base(rcrtc->plane, crtc->fb);
+
+	rcrtc->outputs = 0;
 
 	return 0;
 

@@ -38,6 +38,8 @@ struct rcar_du_encoder_vga_data {
 
 struct rcar_du_encoder_data {
 	enum rcar_du_encoder_type encoder;
+	unsigned int output;
+
 	union {
 		struct rcar_du_encoder_lvds_data lvds;
 		struct rcar_du_encoder_vga_data vga;
@@ -45,7 +47,8 @@ struct rcar_du_encoder_data {
 };
 
 struct rcar_du_platform_data {
-	struct rcar_du_encoder_data encoders[2];
+	struct rcar_du_encoder_data *encoders;
+	unsigned int num_encoders;
 };
 
 #endif /* __RCAR_DU_H__ */

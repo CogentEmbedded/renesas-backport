@@ -127,25 +127,23 @@ static const struct drm_encoder_funcs encoder_funcs = {
 
 int rcar_du_vga_init(struct rcar_du_device *rcdu,
 		     const struct rcar_du_encoder_vga_data *data,
-		     unsigned int crtc)
+		     unsigned int output)
 {
 	struct rcar_du_encoder *renc;
-	struct drm_encoder *encoder;
 	int ret;
 
 	renc = devm_kzalloc(rcdu->dev, sizeof(*renc), GFP_KERNEL);
 	if (renc == NULL)
 		return -ENOMEM;
 
-	encoder = &renc->encoder;
-	encoder->possible_crtcs = 1 << crtc;
+	renc->output = output;
 
-	ret = drm_encoder_init(rcdu->ddev, encoder, &encoder_funcs,
+	ret = drm_encoder_init(rcdu->ddev, &renc->encoder, &encoder_funcs,
 			       DRM_MODE_ENCODER_DAC);
 	if (ret < 0)
 		return ret;
 
-	drm_encoder_helper_add(encoder, &encoder_helper_funcs);
+	drm_encoder_helper_add(&renc->encoder, &encoder_helper_funcs);
 
 	return rcar_du_vga_connector_init(rcdu, renc);
 }
