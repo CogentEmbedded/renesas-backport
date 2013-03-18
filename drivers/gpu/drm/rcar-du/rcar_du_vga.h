@@ -19,6 +19,6 @@ struct rcar_du_encoder_vga_data;
 
 int rcar_du_vga_init(struct rcar_du_device *rcdu,
 		     const struct rcar_du_encoder_vga_data *data,
-		     unsigned int crtc);
+		     unsigned int output);
 
 #endif /* __RCAR_DU_VGA_H__ */

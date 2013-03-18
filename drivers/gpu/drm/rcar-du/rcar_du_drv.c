@@ -60,6 +60,11 @@ int rcar_du_get(struct rcar_du_device *rcdu)
 	rcar_du_write(rcdu, DEFR3, DEFR3_CODE | DEFR3_DEFE3);
 	rcar_du_write(rcdu, DEFR4, DEFR4_CODE);
 
+	/* Use DS1PR and DS2PR to configure planes priorities and connects the
+	 * superposition 0 to DU0 pins. DU1 pins will be configured dynamically.
+	 */
+	rcar_du_write(rcdu, DORCR, DORCR_PG1D_DS1 | DORCR_DPRS);
+
 done:
 	rcdu->use_count++;
 	return 0;

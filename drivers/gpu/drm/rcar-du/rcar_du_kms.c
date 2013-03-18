@@ -119,6 +119,9 @@ void rcar_du_encoder_mode_set(struct drm_encoder *encoder,
 			      struct drm_display_mode *mode,
 			      struct drm_display_mode *adjusted_mode)
 {
+	struct rcar_du_encoder *renc = to_rcar_encoder(encoder);
+
+	rcar_du_crtc_route_output(encoder->crtc, renc->output);
 }
 
 void rcar_du_encoder_mode_commit(struct drm_encoder *encoder)
@@ -165,7 +168,8 @@ static const struct drm_mode_config_funcs rcar_du_mode_config_funcs = {
 
 int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 {
-	const struct rcar_du_encoder_data *pdata;
+	struct drm_device *dev = rcdu->ddev;
+	struct drm_encoder *encoder;
 	unsigned int i;
 	int ret;
 
@@ -181,20 +185,30 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 	if (ret < 0)
 		return ret;
 
-	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i) {
+	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i)
 		rcar_du_crtc_create(rcdu, i);
 
-		pdata = &rcdu->pdata->encoders[i];
-		if (pdata->encoder == RCAR_DU_ENCODER_UNUSED)
+	rcdu->used_crtcs = 0;
+	rcdu->num_crtcs = i;
+
+	for (i = 0; i < rcdu->pdata->num_encoders; ++i) {
+		const struct rcar_du_encoder_data *pdata =
+			&rcdu->pdata->encoders[i];
+
+		if (pdata->output >= ARRAY_SIZE(rcdu->crtcs)) {
+			dev_warn(rcdu->dev,
+				 "encoder %u references unexisting output %u, skipping\n",
+				 i, pdata->output);
 			continue;
+		}
 
 		switch (pdata->encoder) {
 		case RCAR_DU_ENCODER_VGA:
-			rcar_du_vga_init(rcdu, &pdata->u.vga, i);
+			rcar_du_vga_init(rcdu, &pdata->u.vga, pdata->output);
 			break;
 
 		case RCAR_DU_ENCODER_LVDS:
-			rcar_du_lvds_init(rcdu, &pdata->u.lvds, i);
+			rcar_du_lvds_init(rcdu, &pdata->u.lvds, pdata->output);
 			break;
 
 		default:
@@ -202,8 +216,16 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 		}
 	}
 
-	rcdu->used_crtcs = 0;
-	rcdu->num_crtcs = i;
+	/* Set the possible CRTCs and possible clones. All encoders can be
+	 * driven by the CRTC associated with the output they're connected to,
+	 * as well as by CRTC 0.
+	 */
+	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
+		struct rcar_du_encoder *renc = to_rcar_encoder(encoder);
+
+		encoder->possible_crtcs = (1 << 0) | (1 << renc->output);
+		encoder->possible_clones = 1 << 0;
+	}
 
 	ret = rcar_du_plane_register(rcdu);
 	if (ret < 0)

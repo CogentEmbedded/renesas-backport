@@ -14,12 +14,11 @@
 #ifndef __RCAR_DU_LVDS_H__
 #define __RCAR_DU_LVDS_H__
 
-struct rcar_du_crtc;
 struct rcar_du_device;
 struct rcar_du_encoder_lvds_data;
 
 int rcar_du_lvds_init(struct rcar_du_device *rcdu,
 		      const struct rcar_du_encoder_lvds_data *data,
-		      unsigned int crtc);
+		      unsigned int output);
 
 #endif /* __RCAR_DU_LVDS_H__ */
