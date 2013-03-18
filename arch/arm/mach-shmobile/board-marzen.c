@@ -93,31 +93,35 @@ static struct resource rcar_du_resources[] = {
 /* The panel only specifies the [hv]display and [hv]total values. The position
  * and width of the sync pulses don't matter, they're copied from VESA timings.
  */
-static struct rcar_du_platform_data rcar_du_pdata = {
-	.encoders = {
-		[0] = {
-			.encoder = RCAR_DU_ENCODER_VGA,
-		},
-		[1] = {
-			.encoder = RCAR_DU_ENCODER_LVDS,
-			.u.lvds.panel = {
-				.width_mm = 210,
-				.height_mm = 158,
-				.mode = {
-					.clock = 65000,
-					.hdisplay = 1024,
-					.hsync_start = 1048,
-					.hsync_end = 1184,
-					.htotal = 1344,
-					.vdisplay = 768,
-					.vsync_start = 771,
-					.vsync_end = 777,
-					.vtotal = 806,
-					.flags = 0,
-				},
+static struct rcar_du_encoder_data rcar_du_encoders[] = {
+	{
+		.encoder = RCAR_DU_ENCODER_VGA,
+		.output = 0,
+	}, {
+		.encoder = RCAR_DU_ENCODER_LVDS,
+		.output = 1,
+		.u.lvds.panel = {
+			.width_mm = 210,
+			.height_mm = 158,
+			.mode = {
+				.clock = 65000,
+				.hdisplay = 1024,
+				.hsync_start = 1048,
+				.hsync_end = 1184,
+				.htotal = 1344,
+				.vdisplay = 768,
+				.vsync_start = 771,
+				.vsync_end = 777,
+				.vtotal = 806,
+				.flags = 0,
 			},
 		},
 	},
+};
+
+static struct rcar_du_platform_data rcar_du_pdata = {
+	.encoders = rcar_du_encoders,
+	.num_encoders = ARRAY_SIZE(rcar_du_encoders),
 };
 
 static struct platform_device rcar_du_device = {
