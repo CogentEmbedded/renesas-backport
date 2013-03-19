@@ -761,6 +761,7 @@ config ARCH_SHMOBILE
 	select GENERIC_CLOCKEVENTS
 	select MIGHT_HAVE_CACHE_L2X0
 	select NO_IOPORT
+	select PINCTRL
 	select SPARSE_IRQ
 	select MULTI_IRQ_HANDLER
 	select PM_GENERIC_DOMAINS if PM
@@ -1574,6 +1575,12 @@ config HAVE_ARM_SCU
 	bool
 	help
 	  This option enables support for the ARM system coherency unit
+
+config ARM_ARCH_TIMER
+	bool "Architected timer support"
+	depends on CPU_V7
+	help
+	  This option enables support for the ARM architected timer
 
 config HAVE_ARM_TWD
 	bool

@@ -25,10 +25,6 @@ smp-$(CONFIG_ARCH_EMEV2)	+= smp-emev2.o
 pfc-y				:=
 pfc-$(CONFIG_ARCH_SH7367)	+= pfc-sh7367.o
 pfc-$(CONFIG_ARCH_SH7377)	+= pfc-sh7377.o
-pfc-$(CONFIG_ARCH_SH7372)	+= pfc-sh7372.o
-pfc-$(CONFIG_ARCH_SH73A0)	+= pfc-sh73a0.o
-pfc-$(CONFIG_ARCH_R8A7740)	+= pfc-r8a7740.o
-pfc-$(CONFIG_ARCH_R8A7779)	+= pfc-r8a7779.o
 
 # IRQ objects
 obj-$(CONFIG_ARCH_SH7367)	+= entry-intc.o
@@ -59,7 +55,6 @@ obj-$(CONFIG_MACH_KZM9G)	+= board-kzm9g.o
 
 # Framework support
 obj-$(CONFIG_SMP)		+= $(smp-y)
-obj-$(CONFIG_GENERIC_GPIO)	+= $(pfc-y)
 
 # IPMMU/IPMMUI
 obj-$(CONFIG_SHMOBILE_IPMMU)	+= ipmmu.o

@@ -25,6 +25,7 @@
 #include <linux/pda_power.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/irqchip/arm-gic.h>
 #include <linux/i2c.h>
 
 #include <sound/wm8903.h>
@@ -32,7 +33,6 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
-#include <asm/hardware/gic.h>
 #include <asm/setup.h>
 
 #include <mach/tegra_wm8903_pdata.h>

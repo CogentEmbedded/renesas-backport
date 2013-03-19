@@ -36,7 +36,6 @@
 #include <mach/irqs.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 #include <asm/traps.h>
 
 /* Dummy supplies, where voltage doesn't matter */
@@ -103,11 +102,11 @@ static void __init marzen_init(void)
 }
 
 MACHINE_START(MARZEN, "marzen")
+	.smp		= smp_ops(r8a7779_smp_ops),
 	.map_io		= r8a7779_map_io,
 	.init_early	= r8a7779_add_early_devices,
 	.nr_irqs	= NR_IRQS_LEGACY,
 	.init_irq	= r8a7779_init_irq,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= marzen_init,
 	.init_late	= shmobile_init_late,
 	.timer		= &shmobile_timer,
