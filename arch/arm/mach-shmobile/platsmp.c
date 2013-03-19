@@ -17,7 +17,6 @@
 #include <linux/smp.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 #include <mach/common.h>
 #include <mach/emev2.h>
@@ -115,8 +114,6 @@ void __init smp_init_cpus(void)
 
 	for (i = 0; i < ncores; i++)
 		set_cpu_possible(i, true);
-
-	set_smp_cross_call(gic_raise_softirq);
 }
 
 void __init platform_smp_prepare_cpus(unsigned int max_cpus)

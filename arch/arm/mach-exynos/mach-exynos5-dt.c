@@ -13,7 +13,6 @@
 #include <linux/serial_core.h>
 
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 #include <mach/map.h>
 
 #include <plat/cpu.h>
@@ -70,7 +69,6 @@ DT_MACHINE_START(EXYNOS5_DT, "SAMSUNG EXYNOS5 (Flattened Device Tree)")
 	/* Maintainer: Kukjin Kim <kgene.kim@samsung.com> */
 	.init_irq	= exynos5_init_irq,
 	.map_io		= exynos5250_dt_map_io,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= exynos5250_dt_machine_init,
 	.timer		= &exynos4_timer,
 	.dt_compat	= exynos5250_dt_compat,
