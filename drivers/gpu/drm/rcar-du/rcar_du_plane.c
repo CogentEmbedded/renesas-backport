@@ -312,6 +312,9 @@ static int rcar_du_plane_disable(struct drm_plane *plane)
 	struct rcar_du_device *rcdu = plane->dev->dev_private;
 	struct rcar_du_plane *rplane = to_rcar_plane(plane);
 
+	if (!rplane->enabled)
+		return 0;
+
 	mutex_lock(&rcdu->planes.lock);
 	rplane->enabled = false;
 	rcar_du_crtc_update_planes(rplane->crtc);
