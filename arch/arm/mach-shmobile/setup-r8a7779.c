@@ -22,6 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/platform_data/gpio-rcar.h>
+#include <linux/platform_data/rcar-du.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/input.h>
@@ -300,6 +301,13 @@ static struct platform_device tmu01_device = {
 	.num_resources	= ARRAY_SIZE(tmu01_resources),
 };
 
+
+/* DU */
+static struct resource du_resources[] = {
+	DEFINE_RES_MEM(0xfff80000, 0x40000),
+	DEFINE_RES_IRQ(gic_iid(0x3f)),
+};
+
 static struct platform_device *r8a7779_early_devices[] __initdata = {
 	&scif0_device,
 	&scif1_device,
@@ -331,6 +339,21 @@ void __init r8a7779_add_standard_devices(void)
 			    ARRAY_SIZE(r8a7779_early_devices));
 	platform_add_devices(r8a7779_late_devices,
 			    ARRAY_SIZE(r8a7779_late_devices));
+}
+
+void __init r8a7779_add_du_device(struct rcar_du_platform_data *pdata)
+{
+	struct platform_device_info info = {
+		.name = "rcar-du-r8a7779",
+		.id = -1,
+		.res = du_resources,
+		.num_res = ARRAY_SIZE(du_resources),
+		.data = pdata,
+		.size_data = sizeof(*pdata),
+		.dma_mask = DMA_BIT_MASK(32),
+	};
+
+	platform_device_register_full(&info);
 }
 
 /* do nothing for !CONFIG_SMP or !CONFIG_HAVE_TWD */
