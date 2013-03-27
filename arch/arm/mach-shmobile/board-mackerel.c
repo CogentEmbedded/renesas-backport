@@ -62,6 +62,8 @@
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
 
+#include "sh-gpio.h"
+
 /*
  * Address	Interface		BusWidth	note
  * ------------------------------------------------------------------
@@ -203,32 +205,6 @@
  * amixer set "HPOUTR Mixer DACH" on
  */
 
-/*
- * FIXME !!
- *
- * gpio_no_direction
- * gpio_pull_down
- * are quick_hack.
- *
- * current gpio frame work doesn't have
- * the method to control only pull up/down/free.
- * this function should be replaced by correct gpio function
- */
-static void __init gpio_no_direction(u32 addr)
-{
-	__raw_writeb(0x00, addr);
-}
-
-static void __init gpio_pull_down(u32 addr)
-{
-	u8 data = __raw_readb(addr);
-
-	data &= 0x0F;
-	data |= 0xA0;
-
-	__raw_writeb(data, addr);
-}
-
 /* MTD */
 static struct mtd_partition nor_flash_partitions[] = {
 	{
@@ -360,7 +336,7 @@ static struct fb_videomode mackerel_lcdc_modes[] = {
 
 static int mackerel_set_brightness(int brightness)
 {
-	gpio_set_value(GPIO_PORT31, brightness);
+	gpio_set_value(31, brightness);
 
 	return 0;
 }
@@ -819,22 +795,22 @@ static struct platform_device usbhs1_device = {
 static struct gpio_led mackerel_leds[] = {
 	{
 		.name		= "led0",
-		.gpio		= GPIO_PORT0,
+		.gpio		= 0,
 		.default_state	= LEDS_GPIO_DEFSTATE_ON,
 	},
 	{
 		.name		= "led1",
-		.gpio		= GPIO_PORT1,
+		.gpio		= 1,
 		.default_state	= LEDS_GPIO_DEFSTATE_ON,
 	},
 	{
 		.name		= "led2",
-		.gpio		= GPIO_PORT2,
+		.gpio		= 2,
 		.default_state	= LEDS_GPIO_DEFSTATE_ON,
 	},
 	{
 		.name		= "led3",
-		.gpio		= GPIO_PORT159,
+		.gpio		= 159,
 		.default_state	= LEDS_GPIO_DEFSTATE_ON,
 	}
 };
@@ -1030,11 +1006,11 @@ static struct platform_device nand_flash_device = {
 
 /*
  * The card detect pin of the top SD/MMC slot (CN7) is active low and is
- * connected to GPIO A22 of SH7372 (GPIO_PORT41).
+ * connected to GPIO A22 of SH7372 (GPIO 41).
  */
 static int slot_cn7_get_cd(struct platform_device *pdev)
 {
-	return !gpio_get_value(GPIO_PORT41);
+	return !gpio_get_value(41);
 }
 
 /* SDHI0 */
@@ -1043,7 +1019,7 @@ static struct sh_mobile_sdhi_info sdhi0_info = {
 	.dma_slave_rx	= SHDMA_SLAVE_SDHI0_RX,
 	.tmio_flags	= TMIO_MMC_USE_GPIO_CD,
 	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ,
-	.cd_gpio	= GPIO_PORT172,
+	.cd_gpio	= 172,
 };
 
 static struct resource sdhi0_resources[] = {
@@ -1126,11 +1102,11 @@ static struct platform_device sdhi1_device = {
 
 /*
  * The card detect pin of the top SD/MMC slot (CN23) is active low and is
- * connected to GPIO SCIFB_SCK of SH7372 (GPIO_PORT162).
+ * connected to GPIO SCIFB_SCK of SH7372 (162).
  */
 static int slot_cn23_get_cd(struct platform_device *pdev)
 {
-	return !gpio_get_value(GPIO_PORT162);
+	return !gpio_get_value(162);
 }
 
 /* SDHI2 */
@@ -1444,19 +1420,18 @@ static void __init mackerel_init(void)
 	gpio_request(GPIO_FN_LCDDISP,  NULL);
 	gpio_request(GPIO_FN_LCDDCK,   NULL);
 
-	gpio_request(GPIO_PORT31, NULL); /* backlight */
-	gpio_direction_output(GPIO_PORT31, 0); /* off by default */
+	/* backlight, off by default */
+	gpio_request_one(31, GPIOF_OUT_INIT_LOW, NULL);
 
-	gpio_request(GPIO_PORT151, NULL); /* LCDDON */
-	gpio_direction_output(GPIO_PORT151, 1);
+	gpio_request_one(151, GPIOF_OUT_INIT_HIGH, NULL); /* LCDDON */
 
 	/* USBHS0 */
 	gpio_request(GPIO_FN_VBUS0_0, NULL);
-	gpio_pull_down(GPIO_PORT168CR); /* VBUS0_0 pull down */
+	gpio_request_pulldown(GPIO_PORT168CR); /* VBUS0_0 pull down */
 
 	/* USBHS1 */
 	gpio_request(GPIO_FN_VBUS0_1, NULL);
-	gpio_pull_down(GPIO_PORT167CR); /* VBUS0_1 pull down */
+	gpio_request_pulldown(GPIO_PORT167CR); /* VBUS0_1 pull down */
 	gpio_request(GPIO_FN_IDIN_1_113, NULL);
 
 	/* enable FSI2 port A (ak4643) */
@@ -1464,13 +1439,12 @@ static void __init mackerel_init(void)
 	gpio_request(GPIO_FN_FSIAILR,	NULL);
 	gpio_request(GPIO_FN_FSIAISLD,	NULL);
 	gpio_request(GPIO_FN_FSIAOSLD,	NULL);
-	gpio_request(GPIO_PORT161,	NULL);
-	gpio_direction_output(GPIO_PORT161, 0); /* slave */
+	gpio_request_one(161, GPIOF_OUT_INIT_LOW, NULL); /* slave */
 
-	gpio_request(GPIO_PORT9,  NULL);
-	gpio_request(GPIO_PORT10, NULL);
-	gpio_no_direction(GPIO_PORT9CR);  /* FSIAOBT needs no direction */
-	gpio_no_direction(GPIO_PORT10CR); /* FSIAOLR needs no direction */
+	gpio_request(9,  NULL);
+	gpio_request(10, NULL);
+	gpio_direction_none(GPIO_PORT9CR);  /* FSIAOBT needs no direction */
+	gpio_direction_none(GPIO_PORT10CR); /* FSIAOLR needs no direction */
 
 	intc_set_priority(IRQ_FSI, 3); /* irq priority FSI(3) > SMSC911X(2) */
 
@@ -1516,8 +1490,7 @@ static void __init mackerel_init(void)
 	gpio_request(GPIO_FN_SDHID1_0, NULL);
 #endif
 	/* card detect pin for MMC slot (CN7) */
-	gpio_request(GPIO_PORT41, NULL);
-	gpio_direction_input(GPIO_PORT41);
+	gpio_request_one(41, GPIOF_IN, NULL);
 
 	/* enable SDHI2 */
 	gpio_request(GPIO_FN_SDHICMD2, NULL);
@@ -1528,8 +1501,7 @@ static void __init mackerel_init(void)
 	gpio_request(GPIO_FN_SDHID2_0, NULL);
 
 	/* card detect pin for microSD slot (CN23) */
-	gpio_request(GPIO_PORT162, NULL);
-	gpio_direction_input(GPIO_PORT162);
+	gpio_request_one(162, GPIOF_IN, NULL);
 
 	/* MMCIF */
 	gpio_request(GPIO_FN_MMCD0_0, NULL);
