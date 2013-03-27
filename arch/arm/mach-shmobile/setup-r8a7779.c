@@ -114,6 +114,29 @@ R8A7779_GPIO(4, 32);
 R8A7779_GPIO(5, 32);
 R8A7779_GPIO(6, 9);
 
+static struct resource du_resources[] = {
+	[0] = {
+		.name	= "Display Unit",
+		.start	= 0xfff80000,
+		.end	= 0xfffb1007,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= gic_iid(0x3f),
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device du_device = {
+	.name		= "rcar-du",
+	.num_resources	= ARRAY_SIZE(du_resources),
+	.resource	= du_resources,
+	.id		= 0,
+	.dev	= {
+		.coherent_dma_mask = ~0,
+	},
+};
+
 static struct platform_device *r8a7779_pinctrl_devices[] __initdata = {
 	&r8a7779_pfc_device,
 	&r8a7779_gpio0_device,
@@ -331,6 +354,13 @@ void __init r8a7779_add_standard_devices(void)
 			    ARRAY_SIZE(r8a7779_early_devices));
 	platform_add_devices(r8a7779_late_devices,
 			    ARRAY_SIZE(r8a7779_late_devices));
+}
+
+void __init r8a7779_add_du_device(void *pdata)
+{
+	du_device.dev.platform_data = pdata;
+
+	platform_device_register(&du_device);
 }
 
 /* do nothing for !CONFIG_SMP or !CONFIG_HAVE_TWD */
