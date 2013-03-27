@@ -60,6 +60,31 @@ void __init r8a7779_map_io(void)
 	iotable_init(r8a7779_io_desc, ARRAY_SIZE(r8a7779_io_desc));
 }
 
+static struct resource r8a7779_pfc_resources[] = {
+	[0] = {
+		.start	= 0xfffc0000,
+		.end	= 0xfffc023b,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= 0xffc40000,
+		.end	= 0xffc46fff,
+		.flags	= IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device r8a7779_pfc_device = {
+	.name		= "pfc-r8a7779",
+	.id		= -1,
+	.resource	= r8a7779_pfc_resources,
+	.num_resources	= ARRAY_SIZE(r8a7779_pfc_resources),
+};
+
+void __init r8a7779_pinmux_init(void)
+{
+	platform_device_register(&r8a7779_pfc_device);
+}
+
 static struct plat_sci_port scif0_platform_data = {
 	.mapbase	= 0xffe40000,
 	.flags		= UPF_BOOT_AUTOCONF | UPF_IOREMAP,
@@ -229,6 +254,79 @@ static struct platform_device tmu01_device = {
 	.num_resources	= ARRAY_SIZE(tmu01_resources),
 };
 
+/* I2C */
+static struct resource rcar_i2c0_res[] = {
+	{
+		.start  = 0xffc70000,
+		.end    = 0xffc70fff,
+		.flags  = IORESOURCE_MEM,
+	}, {
+		.start  = gic_spi(79),
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device i2c0_device = {
+	.name		= "i2c-rcar",
+	.id		= 0,
+	.resource	= rcar_i2c0_res,
+	.num_resources	= ARRAY_SIZE(rcar_i2c0_res),
+};
+
+static struct resource rcar_i2c1_res[] = {
+	{
+		.start  = 0xffc71000,
+		.end    = 0xffc71fff,
+		.flags  = IORESOURCE_MEM,
+	}, {
+		.start  = gic_spi(82),
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device i2c1_device = {
+	.name		= "i2c-rcar",
+	.id		= 1,
+	.resource	= rcar_i2c1_res,
+	.num_resources	= ARRAY_SIZE(rcar_i2c1_res),
+};
+
+static struct resource rcar_i2c2_res[] = {
+	{
+		.start  = 0xffc72000,
+		.end    = 0xffc72fff,
+		.flags  = IORESOURCE_MEM,
+	}, {
+		.start  = gic_spi(80),
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device i2c2_device = {
+	.name		= "i2c-rcar",
+	.id		= 2,
+	.resource	= rcar_i2c2_res,
+	.num_resources	= ARRAY_SIZE(rcar_i2c2_res),
+};
+
+static struct resource rcar_i2c3_res[] = {
+	{
+		.start  = 0xffc73000,
+		.end    = 0xffc73fff,
+		.flags  = IORESOURCE_MEM,
+	}, {
+		.start  = gic_spi(81),
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device i2c3_device = {
+	.name		= "i2c-rcar",
+	.id		= 3,
+	.resource	= rcar_i2c3_res,
+	.num_resources	= ARRAY_SIZE(rcar_i2c3_res),
+};
+
 static struct platform_device *r8a7779_early_devices[] __initdata = {
 	&scif0_device,
 	&scif1_device,
@@ -238,6 +336,10 @@ static struct platform_device *r8a7779_early_devices[] __initdata = {
 	&scif5_device,
 	&tmu00_device,
 	&tmu01_device,
+	&i2c0_device,
+	&i2c1_device,
+	&i2c2_device,
+	&i2c3_device,
 };
 
 static struct platform_device *r8a7779_late_devices[] __initdata = {

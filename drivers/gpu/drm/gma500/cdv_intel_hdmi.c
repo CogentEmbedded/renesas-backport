@@ -90,7 +90,7 @@ static void cdv_hdmi_mode_set(struct drm_encoder *encoder,
 }
 
 static bool cdv_hdmi_mode_fixup(struct drm_encoder *encoder,
-				  struct drm_display_mode *mode,
+				  const struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
 {
 	return true;
@@ -157,8 +157,6 @@ static enum drm_connector_status cdv_hdmi_detect(
 			hdmi_priv->has_hdmi_audio =
 						drm_detect_monitor_audio(edid);
 		}
-
-		psb_intel_connector->base.display_info.raw_edid = NULL;
 		kfree(edid);
 	}
 	return status;
