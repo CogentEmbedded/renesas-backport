@@ -25,11 +25,11 @@
 #include <linux/io.h>
 #include <linux/platform_data/irq-renesas-intc-irqpin.h>
 #include <linux/irqchip.h>
+#include <linux/irqchip/arm-gic.h>
 #include <mach/common.h>
 #include <mach/intc.h>
 #include <mach/irqs.h>
 #include <mach/r8a7779.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
