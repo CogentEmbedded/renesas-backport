@@ -36,6 +36,7 @@ struct rcar_du_plane {
 	bool enabled;
 
 	int hwindex;		/* 0-based, -1 means unused */
+	unsigned int alpha;
 	unsigned int colorkey;
 	unsigned int zpos;
 
