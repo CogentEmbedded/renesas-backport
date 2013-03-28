@@ -161,6 +161,7 @@ static void rcar_du_plane_setup_mode(struct rcar_du_plane *plane,
 		break;
 
 	case DRM_FORMAT_ARGB1555:
+	case DRM_FORMAT_XRGB1555:
 		colorkey = ((plane->colorkey & 0xf80000) >> 9)
 			 | ((plane->colorkey & 0x00f800) >> 6)
 			 | ((plane->colorkey & 0x0000f8) >> 3);
@@ -391,6 +392,7 @@ static const struct drm_plane_funcs rcar_du_plane_funcs = {
 static const uint32_t formats[] = {
 	DRM_FORMAT_RGB565,
 	DRM_FORMAT_ARGB1555,
+	DRM_FORMAT_XRGB1555,
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_UYVY,
