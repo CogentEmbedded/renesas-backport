@@ -137,6 +137,21 @@ static void rcar_du_plane_setup_mode(struct rcar_du_plane *plane,
 	u32 colorkey;
 	u32 pnmr;
 
+	/* The PnALPHAR register controls alpha-blending in 16bpp formats
+	 * (ARGB1555 and XRGB1555).
+	 *
+	 * For ARGB, set the alpha value to 0, and enable alpha-blending when
+	 * the A bit is 0. This maps A=0 to alpha=0 and A=1 to alpha=255.
+	 *
+	 * For XRGB, set the alpha value to the plane-wide alpha value and
+	 * enable alpha-blending regardless of the X bit value.
+	 */
+	if (plane->format->fourcc != DRM_FORMAT_XRGB1555)
+		rcar_du_plane_write(rcdu, index, PnALPHAR, PnALPHAR_ABIT_0);
+	else
+		rcar_du_plane_write(rcdu, index, PnALPHAR,
+				    PnALPHAR_ABIT_X | plane->alpha);
+
 	pnmr = PnMR_BM_MD | plane->format->pnmr;
 
 	/* Disable color keying when requested. YUV formats have the
@@ -212,12 +227,6 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 
 	rcar_du_plane_write(rcdu, index, PnDDCR2, ddcr2);
 	rcar_du_plane_write(rcdu, index, PnDDCR4, ddcr4);
-
-	/* The PnALPHAR register controls alpha-blending in 16bpp formats
-	 * (ARGB1555). Set the alpha value to 0, and enable alpha-blending when
-	 * the A bit is 0. This maps A=0 to alpha=0 and A=1 to alpha=255.
-	 */
-	rcar_du_plane_write(rcdu, index, PnALPHAR, PnALPHAR_ABIT_0);
 
 	/* Memory pitch (expressed in pixels) */
 	if (plane->format->planes == 2)
@@ -329,6 +338,22 @@ static int rcar_du_plane_disable(struct drm_plane *plane)
 	return 0;
 }
 
+/* Both the .set_property and the .update_plane operations are called with the
+ * mode_config lock held. There is this no need to explicitly protect access to
+ * the alpha and colorkey fields and the mode register.
+ */
+static void rcar_du_plane_set_alpha(struct rcar_du_plane *plane, u32 alpha)
+{
+	if (plane->alpha == alpha)
+		return;
+
+	plane->alpha = alpha;
+	if (!plane->enabled || plane->format->fourcc != DRM_FORMAT_XRGB1555)
+		return;
+
+	rcar_du_plane_setup_mode(plane, plane->hwindex);
+}
+
 static void rcar_du_plane_set_colorkey(struct rcar_du_plane *plane,
 				       u32 colorkey)
 {
@@ -339,10 +364,6 @@ static void rcar_du_plane_set_colorkey(struct rcar_du_plane *plane,
 	if (!plane->enabled)
 		return;
 
-	/* Both the .set_property and the .update_plane operations are called
-	 * with the mode_config lock held. There is this no need to explicitly
-	 * protect access to the colorkey field and the mode register.
-	 */
 	rcar_du_plane_setup_mode(plane, plane->hwindex);
 }
 
@@ -372,7 +393,9 @@ static int rcar_du_plane_set_property(struct drm_plane *plane,
 	struct rcar_du_device *rcdu = plane->dev->dev_private;
 	struct rcar_du_plane *rplane = to_rcar_plane(plane);
 
-	if (property == rcdu->planes.colorkey)
+	if (property == rcdu->planes.alpha)
+		rcar_du_plane_set_alpha(rplane, value);
+	else if (property == rcdu->planes.colorkey)
 		rcar_du_plane_set_colorkey(rplane, value);
 	else if (property == rcdu->planes.zpos)
 		rcar_du_plane_set_zpos(rplane, value);
@@ -409,6 +432,11 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 	mutex_init(&rcdu->planes.lock);
 	rcdu->planes.free = 0xff;
 
+	rcdu->planes.alpha =
+		drm_property_create_range(rcdu->ddev, 0, "alpha", 0, 255);
+	if (rcdu->planes.alpha == NULL)
+		return -ENOMEM;
+
 	/* The color key is expressed as an RGB888 triplet stored in a 32-bit
 	 * integer in XRGB8888 format. Bit 24 is used as a flag to disable (0)
 	 * or enable source color keying (1).
@@ -429,6 +457,7 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 
 		plane->dev = rcdu;
 		plane->hwindex = -1;
+		plane->alpha = 255;
 		plane->colorkey = RCAR_DU_COLORKEY_NONE;
 		plane->zpos = 0;
 	}
@@ -459,11 +488,12 @@ int rcar_du_plane_register(struct rcar_du_device *rcdu)
 			return ret;
 
 		drm_object_attach_property(&plane->plane.base,
+					   rcdu->planes.alpha, 255);
+		drm_object_attach_property(&plane->plane.base,
 					   rcdu->planes.colorkey,
 					   RCAR_DU_COLORKEY_NONE);
 		drm_object_attach_property(&plane->plane.base,
 					   rcdu->planes.zpos, 1);
-
 	}
 
 	return 0;
