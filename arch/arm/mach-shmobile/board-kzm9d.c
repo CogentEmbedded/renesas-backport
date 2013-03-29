@@ -26,7 +26,6 @@
 #include <mach/emev2.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 
 /* Ether */
 static struct resource smsc911x_resources[] = {
@@ -79,7 +78,6 @@ DT_MACHINE_START(KZM9D_DT, "kzm9d")
 	.init_early	= emev2_add_early_devices,
 	.nr_irqs	= NR_IRQS_LEGACY,
 	.init_irq	= emev2_init_irq,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= kzm9d_add_standard_devices,
 	.timer		= &shmobile_timer,
 	.dt_compat	= kzm9d_boards_compat_dt,
