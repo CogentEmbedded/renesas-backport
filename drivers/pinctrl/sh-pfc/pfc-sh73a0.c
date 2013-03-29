@@ -18,18 +18,14 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
-#include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/gpio.h>
 #include <mach/sh73a0.h>
 #include <mach/irqs.h>
 
+#include "sh_pfc.h"
+
 #define CPU_ALL_PORT(fn, pfx, sfx)				\
-	PORT_10(fn, pfx,    sfx), PORT_10(fn, pfx##1, sfx),	\
-	PORT_10(fn, pfx##2, sfx), PORT_10(fn, pfx##3, sfx),	\
-	PORT_10(fn, pfx##4, sfx), PORT_10(fn, pfx##5, sfx),	\
-	PORT_10(fn, pfx##6, sfx), PORT_10(fn, pfx##7, sfx),	\
-	PORT_10(fn, pfx##8, sfx), PORT_10(fn, pfx##9, sfx),	\
+	PORT_10(fn, pfx,    sfx), PORT_90(fn, pfx, sfx),	\
 	PORT_10(fn, pfx##10, sfx),				\
 	PORT_1(fn, pfx##110, sfx), PORT_1(fn, pfx##111, sfx),	\
 	PORT_1(fn, pfx##112, sfx), PORT_1(fn, pfx##113, sfx),	\
@@ -513,7 +509,7 @@ enum {
 	PINMUX_MARK_END,
 };
 
-static pinmux_enum_t pinmux_data[] = {
+static const pinmux_enum_t pinmux_data[] = {
 	/* specify valid pin states for each pin in GPIO mode */
 
 	/* Table 25-1 (I/O and Pull U/D) */
@@ -1502,7 +1498,7 @@ static pinmux_enum_t pinmux_data[] = {
 	PINMUX_DATA(SDHID0_2_PU_MARK, PORT254_FN1, PORT254_IN_PU),
 	PINMUX_DATA(SDHID0_3_PU_MARK, PORT255_FN1, PORT255_IN_PU),
 	PINMUX_DATA(SDHICMD0_PU_MARK, PORT256_FN1, PORT256_IN_PU),
-	PINMUX_DATA(SDHIWP0_PU_MARK,  PORT257_FN1, PORT256_IN_PU),
+	PINMUX_DATA(SDHIWP0_PU_MARK,  PORT257_FN1, PORT257_IN_PU),
 	PINMUX_DATA(SDHID1_0_PU_MARK, PORT259_FN1, PORT259_IN_PU),
 	PINMUX_DATA(SDHID1_1_PU_MARK, PORT260_FN1, PORT260_IN_PU),
 	PINMUX_DATA(SDHID1_2_PU_MARK, PORT261_FN1, PORT261_IN_PU),
@@ -1543,9 +1539,20 @@ static pinmux_enum_t pinmux_data[] = {
 	PINMUX_DATA(FSIAISLD_PU_MARK, PORT55_FN1, PORT55_IN_PU),
 };
 
-static struct pinmux_gpio pinmux_gpios[] = {
+static struct sh_pfc_pin pinmux_pins[] = {
 	GPIO_PORT_ALL(),
+};
 
+static const struct pinmux_range pinmux_ranges[] = {
+	{.begin = 0, .end = 118,},
+	{.begin = 128, .end = 164,},
+	{.begin = 192, .end = 282,},
+	{.begin = 288, .end = 309,},
+};
+
+#define PINMUX_FN_BASE	GPIO_FN_VBUS_0
+
+static const struct pinmux_func pinmux_func_gpios[] = {
 	/* Table 25-1 (Functions 0-7) */
 	GPIO_FN(VBUS_0),
 	GPIO_FN(GPI0),
@@ -2221,7 +2228,7 @@ static struct pinmux_gpio pinmux_gpios[] = {
 	GPIO_FN(FSIAISLD_PU),
 };
 
-static struct pinmux_cfg_reg pinmux_config_regs[] = {
+static const struct pinmux_cfg_reg pinmux_config_regs[] = {
 	PORTCR(0, 0xe6050000), /* PORT0CR */
 	PORTCR(1, 0xe6050001), /* PORT1CR */
 	PORTCR(2, 0xe6050002), /* PORT2CR */
@@ -2629,7 +2636,7 @@ static struct pinmux_cfg_reg pinmux_config_regs[] = {
 	{ },
 };
 
-static struct pinmux_data_reg pinmux_data_regs[] = {
+static const struct pinmux_data_reg pinmux_data_regs[] = {
 	{ PINMUX_DATA_REG("PORTL031_000DR", 0xe6054000, 32) {
 			PORT31_DATA, PORT30_DATA, PORT29_DATA, PORT28_DATA,
 			PORT27_DATA, PORT26_DATA, PORT25_DATA, PORT24_DATA,
@@ -2737,56 +2744,56 @@ static struct pinmux_data_reg pinmux_data_regs[] = {
 #define EXT_IRQ16L(n) intcs_evt2irq(0x200 + ((n) << 5))
 #define EXT_IRQ16H(n) intcs_evt2irq(0x3200 + ((n - 16) << 5))
 
-static struct pinmux_irq pinmux_irqs[] = {
-	PINMUX_IRQ(EXT_IRQ16H(19), PORT9_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(1), PORT10_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(0), PORT11_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(18), PORT13_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(20), PORT14_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(21), PORT15_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(31), PORT26_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(30), PORT27_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(29), PORT28_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(22), PORT40_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(23), PORT53_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(10), PORT54_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(9), PORT56_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(26), PORT115_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(27), PORT116_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(28), PORT117_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(24), PORT118_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(6), PORT147_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(2), PORT149_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(7), PORT150_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(12), PORT156_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(4), PORT159_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(25), PORT164_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(8), PORT223_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(3), PORT224_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(5), PORT227_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(17), PORT234_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(11), PORT238_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(13), PORT239_FN0),
-	PINMUX_IRQ(EXT_IRQ16H(16), PORT249_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(14), PORT251_FN0),
-	PINMUX_IRQ(EXT_IRQ16L(9), PORT308_FN0),
+static const struct pinmux_irq pinmux_irqs[] = {
+	PINMUX_IRQ(EXT_IRQ16H(19), 9),
+	PINMUX_IRQ(EXT_IRQ16L(1), 10),
+	PINMUX_IRQ(EXT_IRQ16L(0), 11),
+	PINMUX_IRQ(EXT_IRQ16H(18), 13),
+	PINMUX_IRQ(EXT_IRQ16H(20), 14),
+	PINMUX_IRQ(EXT_IRQ16H(21), 15),
+	PINMUX_IRQ(EXT_IRQ16H(31), 26),
+	PINMUX_IRQ(EXT_IRQ16H(30), 27),
+	PINMUX_IRQ(EXT_IRQ16H(29), 28),
+	PINMUX_IRQ(EXT_IRQ16H(22), 40),
+	PINMUX_IRQ(EXT_IRQ16H(23), 53),
+	PINMUX_IRQ(EXT_IRQ16L(10), 54),
+	PINMUX_IRQ(EXT_IRQ16L(9), 56),
+	PINMUX_IRQ(EXT_IRQ16H(26), 115),
+	PINMUX_IRQ(EXT_IRQ16H(27), 116),
+	PINMUX_IRQ(EXT_IRQ16H(28), 117),
+	PINMUX_IRQ(EXT_IRQ16H(24), 118),
+	PINMUX_IRQ(EXT_IRQ16L(6), 147),
+	PINMUX_IRQ(EXT_IRQ16L(2), 149),
+	PINMUX_IRQ(EXT_IRQ16L(7), 150),
+	PINMUX_IRQ(EXT_IRQ16L(12), 156),
+	PINMUX_IRQ(EXT_IRQ16L(4), 159),
+	PINMUX_IRQ(EXT_IRQ16H(25), 164),
+	PINMUX_IRQ(EXT_IRQ16L(8), 223),
+	PINMUX_IRQ(EXT_IRQ16L(3), 224),
+	PINMUX_IRQ(EXT_IRQ16L(5), 227),
+	PINMUX_IRQ(EXT_IRQ16H(17), 234),
+	PINMUX_IRQ(EXT_IRQ16L(11), 238),
+	PINMUX_IRQ(EXT_IRQ16L(13), 239),
+	PINMUX_IRQ(EXT_IRQ16H(16), 249),
+	PINMUX_IRQ(EXT_IRQ16L(14), 251),
+	PINMUX_IRQ(EXT_IRQ16L(9), 308),
 };
 
-static struct pinmux_info sh73a0_pinmux_info = {
+const struct sh_pfc_soc_info sh73a0_pinmux_info = {
 	.name = "sh73a0_pfc",
-	.reserved_id = PINMUX_RESERVED,
-	.data = { PINMUX_DATA_BEGIN, PINMUX_DATA_END },
 	.input = { PINMUX_INPUT_BEGIN, PINMUX_INPUT_END },
 	.input_pu = { PINMUX_INPUT_PULLUP_BEGIN, PINMUX_INPUT_PULLUP_END },
 	.input_pd = { PINMUX_INPUT_PULLDOWN_BEGIN, PINMUX_INPUT_PULLDOWN_END },
 	.output = { PINMUX_OUTPUT_BEGIN, PINMUX_OUTPUT_END },
-	.mark = { PINMUX_MARK_BEGIN, PINMUX_MARK_END },
 	.function = { PINMUX_FUNCTION_BEGIN, PINMUX_FUNCTION_END },
 
-	.first_gpio = GPIO_PORT0,
-	.last_gpio = GPIO_FN_FSIAISLD_PU,
+	.pins = pinmux_pins,
+	.nr_pins = ARRAY_SIZE(pinmux_pins),
+	.ranges = pinmux_ranges,
+	.nr_ranges = ARRAY_SIZE(pinmux_ranges),
+	.func_gpios = pinmux_func_gpios,
+	.nr_func_gpios = ARRAY_SIZE(pinmux_func_gpios),
 
-	.gpios = pinmux_gpios,
 	.cfg_regs = pinmux_config_regs,
 	.data_regs = pinmux_data_regs,
 
@@ -2796,8 +2803,3 @@ static struct pinmux_info sh73a0_pinmux_info = {
 	.gpio_irq = pinmux_irqs,
 	.gpio_irq_size = ARRAY_SIZE(pinmux_irqs),
 };
-
-void sh73a0_pinmux_init(void)
-{
-	register_pinmux(&sh73a0_pinmux_info);
-}
