@@ -103,15 +103,22 @@ void rcar_du_plane_update_base(struct rcar_du_plane *plane)
 	struct rcar_du_device *rcdu = plane->dev;
 	unsigned int index = plane->hwindex;
 
+	/* According to the datasheet the Y position is expressed in raster line
+	 * units. However, 32bpp formats seem to require a doubled Y position
+	 * value. Similarly, for the second plane, NV12 and NV21 formats seem to
+	 * require a halved Y position value.
+	 */
 	rcar_du_plane_write(rcdu, index, PnSPXR, plane->src_x);
-	rcar_du_plane_write(rcdu, index, PnSPYR, plane->src_y);
+	rcar_du_plane_write(rcdu, index, PnSPYR, plane->src_y *
+			    (plane->format->bpp == 32 ? 2 : 1));
 	rcar_du_plane_write(rcdu, index, PnDSA0R, plane->dma[0]);
 
 	if (plane->format->planes == 2) {
 		index = (index + 1) % 8;
 
 		rcar_du_plane_write(rcdu, index, PnSPXR, plane->src_x);
-		rcar_du_plane_write(rcdu, index, PnSPYR, plane->src_y);
+		rcar_du_plane_write(rcdu, index, PnSPYR, plane->src_y *
+				    (plane->format->bpp == 16 ? 2 : 1) / 2);
 		rcar_du_plane_write(rcdu, index, PnDSA0R, plane->dma[1]);
 	}
 }
