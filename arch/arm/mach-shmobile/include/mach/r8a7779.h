@@ -3,6 +3,7 @@
 
 #include <linux/sh_clk.h>
 #include <linux/pm_domain.h>
+#include <linux/sh_eth.h>
 
 /* Pin Function Controller:
  * GPIO_FN_xx - GPIO used to select pin function
