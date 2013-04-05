@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/io.h>
+#include <linux/irqchip/arm-gic.h>
 #include <linux/gpio.h>
 #include <linux/gpio_keys.h>
 
@@ -35,7 +36,6 @@
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 
 #include "board.h"
 #include "board-seaboard.h"

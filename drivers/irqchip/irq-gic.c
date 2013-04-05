@@ -38,12 +38,14 @@
 #include <linux/interrupt.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
+#include <linux/irqchip/arm-gic.h>
 
 #include <asm/irq.h>
 #include <asm/exception.h>
 #include <asm/smp_plat.h>
 #include <asm/mach/irq.h>
-#include <asm/hardware/gic.h>
+
+#include "irqchip.h"
 
 union gic_base {
 	void __iomem *common_base;
@@ -68,6 +70,14 @@ struct gic_chip_data {
 };
 
 static DEFINE_RAW_SPINLOCK(irq_controller_lock);
+
+/*
+ * The GIC mapping of CPU interfaces does not necessarily match
+ * the logical CPU numbering.  Let's use a mapping as returned
+ * by the GIC itself.
+ */
+#define NR_GIC_CPU_IF 8
+static u8 gic_cpu_map[NR_GIC_CPU_IF] __read_mostly;
 
 /*
  * Supported arch specific GIC irq extension.
@@ -238,11 +248,11 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	unsigned int cpu = cpumask_any_and(mask_val, cpu_online_mask);
 	u32 val, mask, bit;
 
-	if (cpu >= 8 || cpu >= nr_cpu_ids)
+	if (cpu >= NR_GIC_CPU_IF || cpu >= nr_cpu_ids)
 		return -EINVAL;
 
 	mask = 0xff << shift;
-	bit = 1 << (cpu_logical_map(cpu) + shift);
+	bit = gic_cpu_map[cpu] << shift;
 
 	raw_spin_lock(&irq_controller_lock);
 	val = readl_relaxed(reg) & ~mask;
@@ -268,7 +278,7 @@ static int gic_set_wake(struct irq_data *d, unsigned int on)
 #define gic_set_wake	NULL
 #endif
 
-asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
+static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 {
 	u32 irqstat, irqnr;
 	struct gic_chip_data *gic = &gic_data[0];
@@ -343,17 +353,31 @@ void __init gic_cascade_irq(unsigned int gic_nr, unsigned int irq)
 	irq_set_chained_handler(irq, gic_handle_cascade_irq);
 }
 
+static u8 gic_get_cpumask(struct gic_chip_data *gic)
+{
+	void __iomem *base = gic_data_dist_base(gic);
+	u32 mask, i;
+
+	for (i = mask = 0; i < 32; i += 4) {
+		mask = readl_relaxed(base + GIC_DIST_TARGET + i);
+		mask |= mask >> 16;
+		mask |= mask >> 8;
+		if (mask)
+			break;
+	}
+
+	if (!mask)
+		pr_crit("GIC CPU mask not found - kernel will fail to boot.\n");
+
+	return mask;
+}
+
 static void __init gic_dist_init(struct gic_chip_data *gic)
 {
 	unsigned int i;
 	u32 cpumask;
 	unsigned int gic_irqs = gic->gic_irqs;
 	void __iomem *base = gic_data_dist_base(gic);
-	u32 cpu = cpu_logical_map(smp_processor_id());
-
-	cpumask = 1 << cpu;
-	cpumask |= cpumask << 8;
-	cpumask |= cpumask << 16;
 
 	writel_relaxed(0, base + GIC_DIST_CTRL);
 
@@ -366,6 +390,9 @@ static void __init gic_dist_init(struct gic_chip_data *gic)
 	/*
 	 * Set all global interrupts to this CPU only.
 	 */
+	cpumask = gic_get_cpumask(gic);
+	cpumask |= cpumask << 8;
+	cpumask |= cpumask << 16;
 	for (i = 32; i < gic_irqs; i += 4)
 		writel_relaxed(cpumask, base + GIC_DIST_TARGET + i * 4 / 4);
 
@@ -389,7 +416,23 @@ static void __cpuinit gic_cpu_init(struct gic_chip_data *gic)
 {
 	void __iomem *dist_base = gic_data_dist_base(gic);
 	void __iomem *base = gic_data_cpu_base(gic);
+	unsigned int cpu_mask, cpu = smp_processor_id();
 	int i;
+
+	/*
+	 * Get what the GIC says our CPU mask is.
+	 */
+	BUG_ON(cpu >= NR_GIC_CPU_IF);
+	cpu_mask = gic_get_cpumask(gic);
+	gic_cpu_map[cpu] = cpu_mask;
+
+	/*
+	 * Clear our mask from the other map entries in case they're
+	 * still undefined.
+	 */
+	for (i = 0; i < NR_GIC_CPU_IF; i++)
+		if (i != cpu)
+			gic_cpu_map[i] &= ~cpu_mask;
 
 	/*
 	 * Deal with the banked PPI and SGI interrupts - disable all
@@ -597,6 +640,27 @@ static void __init gic_pm_init(struct gic_chip_data *gic)
 }
 #endif
 
+#ifdef CONFIG_SMP
+void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
+{
+	int cpu;
+	unsigned long map = 0;
+
+	/* Convert our logical CPU mask into a physical one. */
+	for_each_cpu(cpu, mask)
+		map |= gic_cpu_map[cpu];
+
+	/*
+	 * Ensure that stores to Normal memory are visible to the
+	 * other CPUs before issuing the IPI.
+	 */
+	dsb();
+
+	/* this always happens on GIC0 */
+	writel_relaxed(map << 16 | irq, gic_data_dist_base(&gic_data[0]) + GIC_DIST_SOFTINT);
+}
+#endif
+
 static int gic_irq_domain_map(struct irq_domain *d, unsigned int irq,
 				irq_hw_number_t hw)
 {
@@ -646,7 +710,7 @@ void __init gic_init_bases(unsigned int gic_nr, int irq_start,
 {
 	irq_hw_number_t hwirq_base;
 	struct gic_chip_data *gic;
-	int gic_irqs, irq_base;
+	int gic_irqs, irq_base, i;
 
 	BUG_ON(gic_nr >= MAX_GIC_NR);
 
@@ -683,6 +747,13 @@ void __init gic_init_bases(unsigned int gic_nr, int irq_start,
 	}
 
 	/*
+	 * Initialize the CPU interface map to all CPUs.
+	 * It will be refined as each CPU probes its ID.
+	 */
+	for (i = 0; i < NR_GIC_CPU_IF; i++)
+		gic_cpu_map[i] = 0xff;
+
+	/*
 	 * For primary GICs, skip over SGIs.
 	 * For secondary GICs, skip over PPIs, too.
 	 */
@@ -716,6 +787,12 @@ void __init gic_init_bases(unsigned int gic_nr, int irq_start,
 	if (WARN_ON(!gic->domain))
 		return;
 
+#ifdef CONFIG_SMP
+	set_smp_cross_call(gic_raise_softirq);
+#endif
+
+	set_handle_irq(gic_handle_irq);
+
 	gic_chip.flags |= gic_arch_extn.flags;
 	gic_dist_init(gic);
 	gic_cpu_init(gic);
@@ -728,27 +805,6 @@ void __cpuinit gic_secondary_init(unsigned int gic_nr)
 
 	gic_cpu_init(&gic_data[gic_nr]);
 }
-
-#ifdef CONFIG_SMP
-void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
-{
-	int cpu;
-	unsigned long map = 0;
-
-	/* Convert our logical CPU mask into a physical one. */
-	for_each_cpu(cpu, mask)
-		map |= 1 << cpu_logical_map(cpu);
-
-	/*
-	 * Ensure that stores to Normal memory are visible to the
-	 * other CPUs before issuing the IPI.
-	 */
-	dsb();
-
-	/* this always happens on GIC0 */
-	writel_relaxed(map << 16 | irq, gic_data_dist_base(&gic_data[0]) + GIC_DIST_SOFTINT);
-}
-#endif
 
 #ifdef CONFIG_OF
 static int gic_cnt __initdata = 0;
@@ -781,4 +837,9 @@ int __init gic_of_init(struct device_node *node, struct device_node *parent)
 	gic_cnt++;
 	return 0;
 }
+IRQCHIP_DECLARE(cortex_a15_gic, "arm,cortex-a15-gic", gic_of_init);
+IRQCHIP_DECLARE(cortex_a9_gic, "arm,cortex-a9-gic", gic_of_init);
+IRQCHIP_DECLARE(msm_8660_qgic, "qcom,msm-8660-qgic", gic_of_init);
+IRQCHIP_DECLARE(msm_qgic2, "qcom,msm-qgic2", gic_of_init);
+
 #endif

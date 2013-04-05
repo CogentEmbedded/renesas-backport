@@ -9,10 +9,10 @@
 #include <linux/platform_device.h>
 #include <linux/amba/bus.h>
 #include <linux/irq.h>
+#include <linux/irqchip/arm-gic.h>
 #include <linux/i2c.h>
 #include <linux/mfd/abx500/ab5500.h>
 
-#include <asm/hardware/gic.h>
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
 

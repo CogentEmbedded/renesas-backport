@@ -20,7 +20,7 @@
 #include <linux/delay.h>
 #include <linux/percpu.h>
 
-#include <asm/hardware/gic.h>
+#include <asm/arch_timer.h>
 #include <asm/localtimer.h>
 
 #include <plat/cpu.h>
