@@ -382,9 +382,8 @@ static void __init bonito_init(void)
 	/*
 	 * base board settings
 	 */
-	gpio_request(GPIO_PORT176, NULL);
-	gpio_direction_input(GPIO_PORT176);
-	if (!gpio_get_value(GPIO_PORT176)) {
+	gpio_request_one(176, GPIOF_IN, NULL);
+	if (!gpio_get_value(176)) {
 		u16 bsw2;
 		u16 bsw3;
 		u16 bsw4;
@@ -452,8 +451,8 @@ static void __init bonito_init(void)
 			gpio_request(GPIO_FN_LCD0_DISP,		NULL);
 			gpio_request(GPIO_FN_LCD0_LCLK_PORT165,	NULL);
 
-			gpio_request(GPIO_PORT61, NULL); /* LCDDON */
-			gpio_direction_output(GPIO_PORT61, 1);
+			gpio_request_one(61, GPIOF_OUT_INIT_HIGH,
+					 NULL); /* LCDDON */
 
 			/* backlight on */
 			bonito_fpga_write(LCDCR, 1);

@@ -18,11 +18,11 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
-#include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/gpio.h>
 #include <mach/r8a7740.h>
 #include <mach/irqs.h>
+
+#include "sh_pfc.h"
 
 #define CPU_ALL_PORT(fn, pfx, sfx)					\
 	PORT_10(fn, pfx, sfx),		PORT_90(fn, pfx, sfx),		\
@@ -577,7 +577,7 @@ enum {
 	PINMUX_MARK_END,
 };
 
-static pinmux_enum_t pinmux_data[] = {
+static const pinmux_enum_t pinmux_data[] = {
 	/* specify valid pin states for each pin in GPIO mode */
 
 	/* I/O and Pull U/D */
@@ -1654,11 +1654,13 @@ static pinmux_enum_t pinmux_data[] = {
 	PINMUX_DATA(TRACEAUD_FROM_MEMC_MARK,			MSEL5CR_30_1,	MSEL5CR_29_0),
 };
 
-static struct pinmux_gpio pinmux_gpios[] = {
-
-	/* PORT */
+static struct sh_pfc_pin pinmux_pins[] = {
 	GPIO_PORT_ALL(),
+};
 
+#define PINMUX_FN_BASE	ARRAY_SIZE(pinmux_pins)
+
+static const struct pinmux_func pinmux_func_gpios[] = {
 	/* IRQ */
 	GPIO_FN(IRQ0_PORT2),	GPIO_FN(IRQ0_PORT13),
 	GPIO_FN(IRQ1),
@@ -2126,7 +2128,7 @@ static struct pinmux_gpio pinmux_gpios[] = {
 	GPIO_FN(TRACEAUD_FROM_MEMC),
 };
 
-static struct pinmux_cfg_reg pinmux_config_regs[] = {
+static const struct pinmux_cfg_reg pinmux_config_regs[] = {
 	PORTCR(0,	0xe6050000), /* PORT0CR */
 	PORTCR(1,	0xe6050001), /* PORT1CR */
 	PORTCR(2,	0xe6050002), /* PORT2CR */
@@ -2440,7 +2442,7 @@ static struct pinmux_cfg_reg pinmux_config_regs[] = {
 	{ },
 };
 
-static struct pinmux_data_reg pinmux_data_regs[] = {
+static const struct pinmux_data_reg pinmux_data_regs[] = {
 	{ PINMUX_DATA_REG("PORTL031_000DR", 0xe6054800, 32) {
 		PORT31_DATA,	PORT30_DATA,	PORT29_DATA,	PORT28_DATA,
 		PORT27_DATA,	PORT26_DATA,	PORT25_DATA,	PORT24_DATA,
@@ -2544,46 +2546,43 @@ static struct pinmux_data_reg pinmux_data_regs[] = {
 	{ },
 };
 
-static struct pinmux_irq pinmux_irqs[] = {
-	PINMUX_IRQ(evt2irq(0x0200), PORT2_FN0,	 PORT13_FN0),	/* IRQ0A */
-	PINMUX_IRQ(evt2irq(0x0220), PORT20_FN0),		/* IRQ1A */
-	PINMUX_IRQ(evt2irq(0x0240), PORT11_FN0,	 PORT12_FN0),	/* IRQ2A */
-	PINMUX_IRQ(evt2irq(0x0260), PORT10_FN0,	 PORT14_FN0),	/* IRQ3A */
-	PINMUX_IRQ(evt2irq(0x0280), PORT15_FN0,	 PORT172_FN0),	/* IRQ4A */
-	PINMUX_IRQ(evt2irq(0x02A0), PORT0_FN0,	 PORT1_FN0),	/* IRQ5A */
-	PINMUX_IRQ(evt2irq(0x02C0), PORT121_FN0, PORT173_FN0),	/* IRQ6A */
-	PINMUX_IRQ(evt2irq(0x02E0), PORT120_FN0, PORT209_FN0),	/* IRQ7A */
-	PINMUX_IRQ(evt2irq(0x0300), PORT119_FN0),		/* IRQ8A */
-	PINMUX_IRQ(evt2irq(0x0320), PORT118_FN0, PORT210_FN0),	/* IRQ9A */
-	PINMUX_IRQ(evt2irq(0x0340), PORT19_FN0),		/* IRQ10A */
-	PINMUX_IRQ(evt2irq(0x0360), PORT104_FN0),		/* IRQ11A */
-	PINMUX_IRQ(evt2irq(0x0380), PORT42_FN0,	 PORT97_FN0),	/* IRQ12A */
-	PINMUX_IRQ(evt2irq(0x03A0), PORT64_FN0,	 PORT98_FN0),	/* IRQ13A */
-	PINMUX_IRQ(evt2irq(0x03C0), PORT63_FN0,	 PORT99_FN0),	/* IRQ14A */
-	PINMUX_IRQ(evt2irq(0x03E0), PORT62_FN0,	 PORT100_FN0),	/* IRQ15A */
-	PINMUX_IRQ(evt2irq(0x3200), PORT68_FN0,	 PORT211_FN0),	/* IRQ16A */
-	PINMUX_IRQ(evt2irq(0x3220), PORT69_FN0),		/* IRQ17A */
-	PINMUX_IRQ(evt2irq(0x3240), PORT70_FN0),		/* IRQ18A */
-	PINMUX_IRQ(evt2irq(0x3260), PORT71_FN0),		/* IRQ19A */
-	PINMUX_IRQ(evt2irq(0x3280), PORT67_FN0),		/* IRQ20A */
-	PINMUX_IRQ(evt2irq(0x32A0), PORT202_FN0),		/* IRQ21A */
-	PINMUX_IRQ(evt2irq(0x32C0), PORT95_FN0),		/* IRQ22A */
-	PINMUX_IRQ(evt2irq(0x32E0), PORT96_FN0),		/* IRQ23A */
-	PINMUX_IRQ(evt2irq(0x3300), PORT180_FN0),		/* IRQ24A */
-	PINMUX_IRQ(evt2irq(0x3320), PORT38_FN0),		/* IRQ25A */
-	PINMUX_IRQ(evt2irq(0x3340), PORT58_FN0,	 PORT81_FN0),	/* IRQ26A */
-	PINMUX_IRQ(evt2irq(0x3360), PORT57_FN0,	 PORT168_FN0),	/* IRQ27A */
-	PINMUX_IRQ(evt2irq(0x3380), PORT56_FN0,	 PORT169_FN0),	/* IRQ28A */
-	PINMUX_IRQ(evt2irq(0x33A0), PORT50_FN0,	 PORT170_FN0),	/* IRQ29A */
-	PINMUX_IRQ(evt2irq(0x33C0), PORT49_FN0,	 PORT171_FN0),	/* IRQ30A */
-	PINMUX_IRQ(evt2irq(0x33E0), PORT41_FN0,	 PORT167_FN0),	/* IRQ31A */
+static const struct pinmux_irq pinmux_irqs[] = {
+	PINMUX_IRQ(evt2irq(0x0200), GPIO_PORT2,   GPIO_PORT13),	/* IRQ0A */
+	PINMUX_IRQ(evt2irq(0x0220), GPIO_PORT20),		/* IRQ1A */
+	PINMUX_IRQ(evt2irq(0x0240), GPIO_PORT11,  GPIO_PORT12),	/* IRQ2A */
+	PINMUX_IRQ(evt2irq(0x0260), GPIO_PORT10,  GPIO_PORT14),	/* IRQ3A */
+	PINMUX_IRQ(evt2irq(0x0280), GPIO_PORT15,  GPIO_PORT172),/* IRQ4A */
+	PINMUX_IRQ(evt2irq(0x02A0), GPIO_PORT0,   GPIO_PORT1),	/* IRQ5A */
+	PINMUX_IRQ(evt2irq(0x02C0), GPIO_PORT121, GPIO_PORT173),/* IRQ6A */
+	PINMUX_IRQ(evt2irq(0x02E0), GPIO_PORT120, GPIO_PORT209),/* IRQ7A */
+	PINMUX_IRQ(evt2irq(0x0300), GPIO_PORT119),		/* IRQ8A */
+	PINMUX_IRQ(evt2irq(0x0320), GPIO_PORT118, GPIO_PORT210),/* IRQ9A */
+	PINMUX_IRQ(evt2irq(0x0340), GPIO_PORT19),		/* IRQ10A */
+	PINMUX_IRQ(evt2irq(0x0360), GPIO_PORT104),		/* IRQ11A */
+	PINMUX_IRQ(evt2irq(0x0380), GPIO_PORT42,  GPIO_PORT97),	/* IRQ12A */
+	PINMUX_IRQ(evt2irq(0x03A0), GPIO_PORT64,  GPIO_PORT98),	/* IRQ13A */
+	PINMUX_IRQ(evt2irq(0x03C0), GPIO_PORT63,  GPIO_PORT99),	/* IRQ14A */
+	PINMUX_IRQ(evt2irq(0x03E0), GPIO_PORT62,  GPIO_PORT100),/* IRQ15A */
+	PINMUX_IRQ(evt2irq(0x3200), GPIO_PORT68,  GPIO_PORT211),/* IRQ16A */
+	PINMUX_IRQ(evt2irq(0x3220), GPIO_PORT69),		/* IRQ17A */
+	PINMUX_IRQ(evt2irq(0x3240), GPIO_PORT70),		/* IRQ18A */
+	PINMUX_IRQ(evt2irq(0x3260), GPIO_PORT71),		/* IRQ19A */
+	PINMUX_IRQ(evt2irq(0x3280), GPIO_PORT67),		/* IRQ20A */
+	PINMUX_IRQ(evt2irq(0x32A0), GPIO_PORT202),		/* IRQ21A */
+	PINMUX_IRQ(evt2irq(0x32C0), GPIO_PORT95),		/* IRQ22A */
+	PINMUX_IRQ(evt2irq(0x32E0), GPIO_PORT96),		/* IRQ23A */
+	PINMUX_IRQ(evt2irq(0x3300), GPIO_PORT180),		/* IRQ24A */
+	PINMUX_IRQ(evt2irq(0x3320), GPIO_PORT38),		/* IRQ25A */
+	PINMUX_IRQ(evt2irq(0x3340), GPIO_PORT58,  GPIO_PORT81),	/* IRQ26A */
+	PINMUX_IRQ(evt2irq(0x3360), GPIO_PORT57,  GPIO_PORT168),/* IRQ27A */
+	PINMUX_IRQ(evt2irq(0x3380), GPIO_PORT56,  GPIO_PORT169),/* IRQ28A */
+	PINMUX_IRQ(evt2irq(0x33A0), GPIO_PORT50,  GPIO_PORT170),/* IRQ29A */
+	PINMUX_IRQ(evt2irq(0x33C0), GPIO_PORT49,  GPIO_PORT171),/* IRQ30A */
+	PINMUX_IRQ(evt2irq(0x33E0), GPIO_PORT41,  GPIO_PORT167),/* IRQ31A */
 };
 
-static struct pinmux_info r8a7740_pinmux_info = {
+const struct sh_pfc_soc_info r8a7740_pinmux_info = {
 	.name		= "r8a7740_pfc",
-	.reserved_id	= PINMUX_RESERVED,
-	.data		= { PINMUX_DATA_BEGIN,
-			    PINMUX_DATA_END },
 	.input		= { PINMUX_INPUT_BEGIN,
 			    PINMUX_INPUT_END },
 	.input_pu	= { PINMUX_INPUT_PULLUP_BEGIN,
@@ -2592,15 +2591,14 @@ static struct pinmux_info r8a7740_pinmux_info = {
 			    PINMUX_INPUT_PULLDOWN_END },
 	.output		= { PINMUX_OUTPUT_BEGIN,
 			    PINMUX_OUTPUT_END },
-	.mark		= { PINMUX_MARK_BEGIN,
-			    PINMUX_MARK_END },
 	.function	= { PINMUX_FUNCTION_BEGIN,
 			    PINMUX_FUNCTION_END },
 
-	.first_gpio	= GPIO_PORT0,
-	.last_gpio	= GPIO_FN_TRACEAUD_FROM_MEMC,
+	.pins		= pinmux_pins,
+	.nr_pins	= ARRAY_SIZE(pinmux_pins),
+	.func_gpios	= pinmux_func_gpios,
+	.nr_func_gpios	= ARRAY_SIZE(pinmux_func_gpios),
 
-	.gpios		= pinmux_gpios,
 	.cfg_regs	= pinmux_config_regs,
 	.data_regs	= pinmux_data_regs,
 
@@ -2610,8 +2608,3 @@ static struct pinmux_info r8a7740_pinmux_info = {
 	.gpio_irq	= pinmux_irqs,
 	.gpio_irq_size	= ARRAY_SIZE(pinmux_irqs),
 };
-
-void r8a7740_pinmux_init(void)
-{
-	register_pinmux(&r8a7740_pinmux_info);
-}
