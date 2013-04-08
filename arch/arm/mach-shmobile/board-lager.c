@@ -40,7 +40,7 @@ static const char *lager_boards_compat_dt[] __initdata = {
 
 DT_MACHINE_START(LAGER_DT, "lager")
 	.init_irq	= irqchip_init,
-	.timer		= &shmobile_timer,
+	.timer		= &r8a7790_timer,
 	.init_machine	= lager_add_standard_devices,
 	.dt_compat	= lager_boards_compat_dt,
 MACHINE_END
