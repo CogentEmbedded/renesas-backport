@@ -2,6 +2,7 @@
 #define __ARCH_MACH_COMMON_H
 
 extern void shmobile_earlytimer_init(void);
+void __init shmobile_timer_init(void);
 extern struct sys_timer shmobile_timer;
 extern void shmobile_setup_delay(unsigned int max_cpu_core_mhz,
 				 unsigned int mult, unsigned int div);
