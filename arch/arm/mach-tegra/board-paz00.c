@@ -28,11 +28,11 @@
 #include <linux/pda_power.h>
 #include <linux/io.h>
 #include <linux/input.h>
+#include <linux/irqchip/arm-gic.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 #include <linux/rfkill-gpio.h>
 
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>

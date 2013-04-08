@@ -24,10 +24,10 @@
 #include <linux/serial_8250.h>
 #include <linux/of_serial.h>
 #include <linux/io.h>
+#include <linux/irqchip/arm-gic.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/setup.h>

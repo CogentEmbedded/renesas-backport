@@ -52,7 +52,8 @@
 struct secondary_data secondary_data;
 
 enum ipi_msg_type {
-	IPI_TIMER = 2,
+	IPI_WAKEUP,
+	IPI_TIMER,
 	IPI_RESCHEDULE,
 	IPI_CALL_FUNC,
 	IPI_CALL_FUNC_SINGLE,
@@ -216,8 +217,11 @@ int __cpu_disable(void)
 	/*
 	 * Flush user cache and TLB mappings, and then remove this CPU
 	 * from the vm mask set of all processes.
+	 *
+	 * Caches are flushed to the Level of Unification Inner Shareable
+	 * to write-back dirty lines to unified caches shared by all CPUs.
 	 */
-	flush_cache_all();
+	flush_cache_louis();
 	local_flush_tlb_all();
 
 	read_lock(&tasklist_lock);
@@ -429,12 +433,18 @@ static void (*smp_cross_call)(const struct cpumask *, unsigned int);
 
 void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
 {
-	smp_cross_call = fn;
+	if (!smp_cross_call)
+		smp_cross_call = fn;
 }
 
 void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 {
 	smp_cross_call(mask, IPI_CALL_FUNC);
+}
+
+void arch_send_wakeup_ipi_mask(const struct cpumask *mask)
+{
+	smp_cross_call(mask, IPI_WAKEUP);
 }
 
 void arch_send_call_function_single_ipi(int cpu)
@@ -443,7 +453,8 @@ void arch_send_call_function_single_ipi(int cpu)
 }
 
 static const char *ipi_types[NR_IPI] = {
-#define S(x,s)	[x - IPI_TIMER] = s
+#define S(x,s)	[x] = s
+	S(IPI_WAKEUP, "CPU wakeup interrupts"),
 	S(IPI_TIMER, "Timer broadcast interrupts"),
 	S(IPI_RESCHEDULE, "Rescheduling interrupts"),
 	S(IPI_CALL_FUNC, "Function call interrupts"),
@@ -593,10 +604,13 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
-	if (ipinr >= IPI_TIMER && ipinr < IPI_TIMER + NR_IPI)
-		__inc_irq_stat(cpu, ipi_irqs[ipinr - IPI_TIMER]);
+	if (ipinr < NR_IPI)
+		__inc_irq_stat(cpu, ipi_irqs[ipinr]);
 
 	switch (ipinr) {
+	case IPI_WAKEUP:
+		break;
+
 	case IPI_TIMER:
 		irq_enter();
 		ipi_timer();
