@@ -25,8 +25,9 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/io.h>
-#include <linux/gpio.h>
+#include <linux/leds.h>
 #include <linux/dma-mapping.h>
+#include <linux/pinctrl/machine.h>
 #include <linux/regulator/fixed.h>
 #include <linux/regulator/machine.h>
 #include <linux/smsc911x.h>
@@ -74,28 +75,72 @@ static struct platform_device eth_device = {
 	.num_resources	= ARRAY_SIZE(smsc911x_resources),
 };
 
+/* LEDS */
+static struct gpio_led marzen_leds[] = {
+	{
+		.name		= "led2",
+		.gpio		= 157,
+		.default_state	= LEDS_GPIO_DEFSTATE_ON,
+	}, {
+		.name		= "led3",
+		.gpio		= 158,
+		.default_state	= LEDS_GPIO_DEFSTATE_ON,
+	}, {
+		.name		= "led4",
+		.gpio		= 159,
+		.default_state	= LEDS_GPIO_DEFSTATE_ON,
+	},
+};
+
+static struct gpio_led_platform_data marzen_leds_pdata = {
+	.leds		= marzen_leds,
+	.num_leds	= ARRAY_SIZE(marzen_leds),
+};
+
+static struct platform_device leds_device = {
+	.name	= "leds-gpio",
+	.id	= 0,
+	.dev	= {
+		.platform_data  = &marzen_leds_pdata,
+	},
+};
+
 static struct platform_device *marzen_devices[] __initdata = {
 	&eth_device,
+	&leds_device,
+};
+
+static const struct pinctrl_map marzen_pinctrl_map[] = {
+	/* SCIF2 (CN18: DEBUG0) */
+	PIN_MAP_MUX_GROUP_DEFAULT("sh-sci.2", "pfc-r8a7779",
+				  "scif2_data_c", "scif2"),
+	/* SCIF4 (CN19: DEBUG1) */
+	PIN_MAP_MUX_GROUP_DEFAULT("sh-sci.4", "pfc-r8a7779",
+				  "scif4_data", "scif4"),
+	/* SDHI0 */
+	PIN_MAP_MUX_GROUP_DEFAULT("sh_mobile_sdhi.0", "pfc-r8a7779",
+				  "sdhi0_data4", "sdhi0"),
+	PIN_MAP_MUX_GROUP_DEFAULT("sh_mobile_sdhi.0", "pfc-r8a7779",
+				  "sdhi0_ctrl", "sdhi0"),
+	PIN_MAP_MUX_GROUP_DEFAULT("sh_mobile_sdhi.0", "pfc-r8a7779",
+				  "sdhi0_cd", "sdhi0"),
+	PIN_MAP_MUX_GROUP_DEFAULT("sh_mobile_sdhi.0", "pfc-r8a7779",
+				  "sdhi0_wp", "sdhi0"),
+	/* SMSC */
+	PIN_MAP_MUX_GROUP_DEFAULT("smsc911x", "pfc-r8a7779",
+				  "intc_irq1_b", "intc"),
+	PIN_MAP_MUX_GROUP_DEFAULT("smsc911x", "pfc-r8a7779",
+				  "lbsc_ex_cs0", "lbsc"),
 };
 
 static void __init marzen_init(void)
 {
 	regulator_register_fixed(0, dummy_supplies, ARRAY_SIZE(dummy_supplies));
 
+	pinctrl_register_mappings(marzen_pinctrl_map,
+				  ARRAY_SIZE(marzen_pinctrl_map));
 	r8a7779_pinmux_init();
 	r8a7779_init_irq_extpin(1); /* IRQ1 as individual interrupt */
-
-	/* SCIF2 (CN18: DEBUG0) */
-	gpio_request(GPIO_FN_TX2_C, NULL);
-	gpio_request(GPIO_FN_RX2_C, NULL);
-
-	/* SCIF4 (CN19: DEBUG1) */
-	gpio_request(GPIO_FN_TX4, NULL);
-	gpio_request(GPIO_FN_RX4, NULL);
-
-	/* LAN89218 */
-	gpio_request(GPIO_FN_EX_CS0, NULL); /* nCS */
-	gpio_request(GPIO_FN_IRQ1_B, NULL); /* IRQ + PME */
 
 	r8a7779_add_standard_devices();
 	platform_add_devices(marzen_devices, ARRAY_SIZE(marzen_devices));

@@ -109,9 +109,9 @@ struct pinctrl_desc {
 	const char *name;
 	struct pinctrl_pin_desc const *pins;
 	unsigned int npins;
-	struct pinctrl_ops *pctlops;
-	struct pinmux_ops *pmxops;
-	struct pinconf_ops *confops;
+	const struct pinctrl_ops *pctlops;
+	const struct pinmux_ops *pmxops;
+	const struct pinconf_ops *confops;
 	struct module *owner;
 };
 
@@ -125,7 +125,24 @@ extern void pinctrl_add_gpio_range(struct pinctrl_dev *pctldev,
 extern void pinctrl_add_gpio_ranges(struct pinctrl_dev *pctldev,
 				struct pinctrl_gpio_range *ranges,
 				unsigned nranges);
+
+extern struct pinctrl_dev *pinctrl_find_and_add_gpio_range(const char *devname,
+		struct pinctrl_gpio_range *range);
+
+#ifdef CONFIG_OF
+extern struct pinctrl_dev *of_pinctrl_get(struct device_node *np);
+#else
+static inline
+struct pinctrl_dev *of_pinctrl_get(struct device_node *np)
+{
+	return NULL;
+}
+#endif /* CONFIG_OF */
+
+extern void pinctrl_remove_gpio_range(struct pinctrl_dev *pctldev,
+				struct pinctrl_gpio_range *range);
 extern const char *pinctrl_dev_get_name(struct pinctrl_dev *pctldev);
+extern const char *pinctrl_dev_get_devname(struct pinctrl_dev *pctldev);
 extern void *pinctrl_dev_get_drvdata(struct pinctrl_dev *pctldev);
 #else
 

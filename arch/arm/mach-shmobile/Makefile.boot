@@ -11,3 +11,5 @@ __ZRELADDR	:= $(shell /bin/bash -c 'printf "0x%08x" \
 dtb-$(CONFIG_MACH_KZM9G) += sh73a0-kzm9g.dtb
 dtb-$(CONFIG_MACH_KZM9D) += emev2-kzm9d.dtb
 dtb-$(CONFIG_MACH_ARMADILLO800EVA) += r8a7740-armadillo800eva.dtb
+dtb-$(CONFIG_MACH_ARMADILLO800EVA) += r8a7740-armadillo800eva.dtb
+dtb-$(CONFIG_MACH_LAGER) += r8a7790-lager.dtb

@@ -22,6 +22,9 @@ config ARCH_REQUIRE_GPIOLIB
 	  Selecting this from the architecture code will cause the gpiolib
 	  code to always get built in.
 
+config GPIO_DEVRES
+	def_bool y
+	depends on HAS_IOMEM
 
 
 menuconfig GPIOLIB
@@ -36,6 +39,10 @@ menuconfig GPIOLIB
 	  If unsure, say N.
 
 if GPIOLIB
+
+config OF_GPIO
+	def_bool y
+	depends on OF && !SPARC
 
 config DEBUG_GPIO
 	bool "Debug GPIO calls"
@@ -154,6 +161,11 @@ config GPIO_PXA
 	depends on ARCH_PXA || ARCH_MMP
 	help
 	  Say yes here to support the PXA GPIO device
+
+config GPIO_RCAR
+	tristate "Renesas R-Car GPIO"
+	depends on ARM
+	help
 
 config GPIO_XILINX
 	bool "Xilinx GPIO support"
