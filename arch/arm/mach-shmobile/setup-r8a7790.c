@@ -18,11 +18,14 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include <linux/dma-mapping.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
 #include <linux/kernel.h>
 #include <linux/of_platform.h>
 #include <linux/serial_sci.h>
+#include <linux/platform_data/gpio-rcar.h>
+#include <linux/platform_data/rcar-du.h>
 #include <linux/platform_data/irq-renesas-irqc.h>
 #include <mach/common.h>
 #include <mach/irqs.h>
@@ -38,6 +41,29 @@ void __init r8a7790_pinmux_init(void)
 {
 	platform_device_register_simple("pfc-r8a7790", -1, pfc_resources,
 					ARRAY_SIZE(pfc_resources));
+}
+
+/* DU */
+static const struct resource du_resources[] = {
+	DEFINE_RES_MEM(0xfeb00000, 0x70000),
+	DEFINE_RES_IRQ(gic_spi(256)),
+	DEFINE_RES_IRQ(gic_spi(268)),
+	DEFINE_RES_IRQ(gic_spi(269)),
+};
+
+void __init r8a7790_add_du_device(struct rcar_du_platform_data *pdata)
+{
+	struct platform_device_info info = {
+		.name = "rcar-du-r8a7790",
+		.id = -1,
+		.res = du_resources,
+		.num_res = ARRAY_SIZE(du_resources),
+		.data = pdata,
+		.size_data = sizeof(*pdata),
+		.dma_mask = DMA_BIT_MASK(32),
+	};
+
+	platform_device_register_full(&info);
 }
 
 #define SCIF_COMMON(scif_type, baseaddr, irq)			\
