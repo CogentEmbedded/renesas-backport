@@ -28,6 +28,7 @@
 #include <linux/serial_sci.h>
 #include <linux/sh_intc.h>
 #include <linux/sh_timer.h>
+#include <linux/dma-mapping.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
 #include <mach/r8a7779.h>
@@ -229,6 +230,30 @@ static struct platform_device tmu01_device = {
 	.num_resources	= ARRAY_SIZE(tmu01_resources),
 };
 
+static struct resource sata_resources[] = {
+	[0] = {
+		.name	= "rcar-sata",
+		.start	= 0xfc600000,
+		.end	= 0xfc601fff,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= gic_spi(100),
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device sata_device = {
+	.name		= "sata_rcar",
+	.id		= -1,
+	.resource	= sata_resources,
+	.num_resources	= ARRAY_SIZE(sata_resources),
+	.dev		= {
+		.dma_mask		= &sata_device.dev.coherent_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+	},
+};
+
 static struct platform_device *r8a7779_early_devices[] __initdata = {
 	&scif0_device,
 	&scif1_device,
@@ -238,6 +263,7 @@ static struct platform_device *r8a7779_early_devices[] __initdata = {
 	&scif5_device,
 	&tmu00_device,
 	&tmu01_device,
+	&sata_device,
 };
 
 static struct platform_device *r8a7779_late_devices[] __initdata = {
