@@ -21,6 +21,7 @@ struct gpio_rcar_config {
 	unsigned int irq_base;
 	unsigned int number_of_pins;
 	const char *pctl_name;
+	unsigned has_both_edge_trigger:1;
 };
 
 #define RCAR_GP_PIN(bank, pin)		(((bank) * 32) + (pin))
