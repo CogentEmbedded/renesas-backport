@@ -20,7 +20,6 @@
 
 #include <linux/dma-mapping.h>
 #include <linux/irq.h>
-#include <linux/irqchip.h>
 #include <linux/kernel.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/gpio-rcar.h>
@@ -354,7 +353,6 @@ static const char *r8a7790_boards_compat_dt[] __initdata = {
 };
 
 DT_MACHINE_START(R8A7790_DT, "Generic R8A7790 (Flattened Device Tree)")
-	.init_irq	= irqchip_init,
 	.init_machine	= r8a7790_add_standard_devices_dt,
 	.timer		= &r8a7790_timer,
 	.dt_compat	= r8a7790_boards_compat_dt,
