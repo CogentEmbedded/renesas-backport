@@ -60,7 +60,7 @@ void __init shmobile_earlytimer_init(void)
 	late_time_init = shmobile_late_time_init;
 }
 
-static void __init shmobile_timer_init(void)
+void __init shmobile_timer_init(void)
 {
 }
 

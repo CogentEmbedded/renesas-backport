@@ -272,8 +272,7 @@ again:
 	spin_unlock(&file_priv->table_lock);
 	if (ret == -EAGAIN)
 		goto again;
-
-	if (ret != 0)
+	else if (ret)
 		return ret;
 
 	drm_gem_object_handle_reference(obj);
@@ -329,7 +328,7 @@ drm_gem_create_mmap_offset(struct drm_gem_object *obj)
 	struct drm_gem_mm *mm = dev->mm_private;
 	struct drm_map_list *list;
 	struct drm_local_map *map;
-	int ret = 0;
+	int ret;
 
 	/* Set the object up for mmap'ing */
 	list = &obj->map_list;
@@ -456,8 +455,7 @@ again:
 
 		if (ret == -EAGAIN)
 			goto again;
-
-		if (ret != 0)
+		else if (ret)
 			goto err;
 
 		/* Allocate a reference for the name table.  */
@@ -628,7 +626,7 @@ void drm_gem_vm_open(struct vm_area_struct *vma)
 	drm_gem_object_reference(obj);
 
 	mutex_lock(&obj->dev->struct_mutex);
-	drm_vm_open_locked(vma);
+	drm_vm_open_locked(obj->dev, vma);
 	mutex_unlock(&obj->dev->struct_mutex);
 }
 EXPORT_SYMBOL(drm_gem_vm_open);
@@ -639,12 +637,41 @@ void drm_gem_vm_close(struct vm_area_struct *vma)
 	struct drm_device *dev = obj->dev;
 
 	mutex_lock(&dev->struct_mutex);
-	drm_vm_close_locked(vma);
+	drm_vm_close_locked(obj->dev, vma);
 	drm_gem_object_unreference(obj);
 	mutex_unlock(&dev->struct_mutex);
 }
 EXPORT_SYMBOL(drm_gem_vm_close);
 
+int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,
+		     struct vm_area_struct *vma)
+{
+	struct drm_device *dev = obj->dev;
+
+	/* Check for valid size. */
+	if (obj_size < vma->vm_end - vma->vm_start)
+		return -EINVAL;
+
+	if (!dev->driver->gem_vm_ops)
+		return -EINVAL;
+
+	vma->vm_flags |= VM_RESERVED | VM_IO | VM_PFNMAP | VM_DONTEXPAND;
+	vma->vm_ops = dev->driver->gem_vm_ops;
+	vma->vm_private_data = obj;
+	vma->vm_page_prot =  pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
+
+	/* Take a ref for this mapping of the object, so that the fault
+	 * handler can dereference the mmap offset's pointer to the object.
+	 * This reference is cleaned up by the corresponding vm_close
+	 * (which should happen whether the vma was created by this call, or
+	 * by a vm_open due to mremap or partial unmap or whatever).
+	 */
+	drm_gem_object_reference(obj);
+
+	drm_vm_open_locked(dev, vma);
+	return 0;
+}
+EXPORT_SYMBOL(drm_gem_mmap_obj);
 
 /**
  * drm_gem_mmap - memory map routine for GEM objects
@@ -666,7 +693,6 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct drm_device *dev = priv->minor->dev;
 	struct drm_gem_mm *mm = dev->mm_private;
 	struct drm_local_map *map = NULL;
-	struct drm_gem_object *obj;
 	struct drm_hash_item *hash;
 	int ret = 0;
 
@@ -687,32 +713,7 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 		goto out_unlock;
 	}
 
-	/* Check for valid size. */
-	if (map->size < vma->vm_end - vma->vm_start) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	obj = map->handle;
-	if (!obj->dev->driver->gem_vm_ops) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	vma->vm_flags |= VM_RESERVED | VM_IO | VM_PFNMAP | VM_DONTEXPAND;
-	vma->vm_ops = obj->dev->driver->gem_vm_ops;
-	vma->vm_private_data = map->handle;
-	vma->vm_page_prot =  pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
-
-	/* Take a ref for this mapping of the object, so that the fault
-	 * handler can dereference the mmap offset's pointer to the object.
-	 * This reference is cleaned up by the corresponding vm_close
-	 * (which should happen whether the vma was created by this call, or
-	 * by a vm_open due to mremap or partial unmap or whatever).
-	 */
-	drm_gem_object_reference(obj);
-
-	drm_vm_open_locked(vma);
+	ret = drm_gem_mmap_obj(map->handle, map->size, vma);
 
 out_unlock:
 	mutex_unlock(&dev->struct_mutex);

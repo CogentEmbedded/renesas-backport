@@ -251,7 +251,7 @@ static void udl_crtc_dpms(struct drm_crtc *crtc, int mode)
 }
 
 static bool udl_crtc_mode_fixup(struct drm_crtc *crtc,
-				  struct drm_display_mode *mode,
+				  const struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
 
 {
@@ -395,7 +395,7 @@ int udl_modeset_init(struct drm_device *dev)
 	dev->mode_config.prefer_shadow = 0;
 	dev->mode_config.preferred_depth = 24;
 
-	dev->mode_config.funcs = (void *)&udl_mode_funcs;
+	dev->mode_config.funcs = &udl_mode_funcs;
 
 	drm_mode_create_dirty_info_property(dev);
 

@@ -310,7 +310,7 @@ static void drm_irq_vgaarb_nokms(void *cookie, bool state)
  */
 int drm_irq_install(struct drm_device *dev)
 {
-	int ret = 0;
+	int ret;
 	unsigned long sh_flags = 0;
 	char *irqname;
 
@@ -731,7 +731,7 @@ EXPORT_SYMBOL(drm_calc_vbltimestamp_from_scanoutpos);
 u32 drm_get_last_vbltimestamp(struct drm_device *dev, int crtc,
 			      struct timeval *tvblank, unsigned flags)
 {
-	int ret = 0;
+	int ret;
 
 	/* Define requested maximum error on timestamps (nanoseconds). */
 	int max_error = (int) drm_timestamp_precision * 1000;
@@ -801,6 +801,46 @@ u32 drm_vblank_count_and_time(struct drm_device *dev, int crtc,
 	return cur_vblank;
 }
 EXPORT_SYMBOL(drm_vblank_count_and_time);
+
+static void send_vblank_event(struct drm_device *dev,
+		struct drm_pending_vblank_event *e,
+		unsigned long seq, struct timeval *now)
+{
+	WARN_ON_SMP(!spin_is_locked(&dev->event_lock));
+	e->event.sequence = seq;
+	e->event.tv_sec = now->tv_sec;
+	e->event.tv_usec = now->tv_usec;
+
+	list_add_tail(&e->base.link,
+		      &e->base.file_priv->event_list);
+	wake_up_interruptible(&e->base.file_priv->event_wait);
+	trace_drm_vblank_event_delivered(e->base.pid, e->pipe,
+					 e->event.sequence);
+}
+
+/**
+ * drm_send_vblank_event - helper to send vblank event after pageflip
+ * @dev: DRM device
+ * @crtc: CRTC in question
+ * @e: the event to send
+ *
+ * Updates sequence # and timestamp on event, and sends it to userspace.
+ * Caller must hold event lock.
+ */
+void drm_send_vblank_event(struct drm_device *dev, int crtc,
+		struct drm_pending_vblank_event *e)
+{
+	struct timeval now;
+	unsigned int seq;
+	if (crtc >= 0) {
+		seq = drm_vblank_count_and_time(dev, crtc, &now);
+	} else {
+		seq = 0;
+		do_gettimeofday(&now);
+	}
+	send_vblank_event(dev, e, seq, &now);
+}
+EXPORT_SYMBOL(drm_send_vblank_event);
 
 /**
  * drm_update_vblank_count - update the master vblank counter
@@ -936,6 +976,13 @@ void drm_vblank_put(struct drm_device *dev, int crtc)
 }
 EXPORT_SYMBOL(drm_vblank_put);
 
+/**
+ * drm_vblank_off - disable vblank events on a CRTC
+ * @dev: DRM device
+ * @crtc: CRTC in question
+ *
+ * Caller must hold event lock.
+ */
 void drm_vblank_off(struct drm_device *dev, int crtc)
 {
 	struct drm_pending_vblank_event *e, *t;
@@ -955,15 +1002,9 @@ void drm_vblank_off(struct drm_device *dev, int crtc)
 		DRM_DEBUG("Sending premature vblank event on disable: \
 			  wanted %d, current %d\n",
 			  e->event.sequence, seq);
-
-		e->event.sequence = seq;
-		e->event.tv_sec = now.tv_sec;
-		e->event.tv_usec = now.tv_usec;
+		list_del(&e->base.link);
 		drm_vblank_put(dev, e->pipe);
-		list_move_tail(&e->base.link, &e->base.file_priv->event_list);
-		wake_up_interruptible(&e->base.file_priv->event_wait);
-		trace_drm_vblank_event_delivered(e->base.pid, e->pipe,
-						 e->event.sequence);
+		send_vblank_event(dev, e, seq, &now);
 	}
 
 	spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
@@ -1031,18 +1072,15 @@ int drm_modeset_ctl(struct drm_device *dev, void *data,
 		    struct drm_file *file_priv)
 {
 	struct drm_modeset_ctl *modeset = data;
-	int ret = 0;
 	unsigned int crtc;
 
 	/* If drm_vblank_init() hasn't been called yet, just no-op */
 	if (!dev->num_crtcs)
-		goto out;
+		return 0;
 
 	crtc = modeset->crtc;
-	if (crtc >= dev->num_crtcs) {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (crtc >= dev->num_crtcs)
+		return -EINVAL;
 
 	switch (modeset->cmd) {
 	case _DRM_PRE_MODESET:
@@ -1052,12 +1090,10 @@ int drm_modeset_ctl(struct drm_device *dev, void *data,
 		drm_vblank_post_modeset(dev, crtc);
 		break;
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
 	}
 
-out:
-	return ret;
+	return 0;
 }
 
 static int drm_queue_vblank_event(struct drm_device *dev, int pipe,
@@ -1109,15 +1145,9 @@ static int drm_queue_vblank_event(struct drm_device *dev, int pipe,
 
 	e->event.sequence = vblwait->request.sequence;
 	if ((seq - vblwait->request.sequence) <= (1 << 23)) {
-		e->event.sequence = seq;
-		e->event.tv_sec = now.tv_sec;
-		e->event.tv_usec = now.tv_usec;
 		drm_vblank_put(dev, pipe);
-		list_add_tail(&e->base.link, &e->base.file_priv->event_list);
-		wake_up_interruptible(&e->base.file_priv->event_wait);
+		send_vblank_event(dev, e, seq, &now);
 		vblwait->reply.sequence = seq;
-		trace_drm_vblank_event_delivered(current->pid, pipe,
-						 vblwait->request.sequence);
 	} else {
 		/* drm_handle_vblank_events will call drm_vblank_put */
 		list_add_tail(&e->base.link, &dev->vblank_event_list);
@@ -1154,7 +1184,7 @@ int drm_wait_vblank(struct drm_device *dev, void *data,
 		    struct drm_file *file_priv)
 {
 	union drm_wait_vblank *vblwait = data;
-	int ret = 0;
+	int ret;
 	unsigned int flags, seq, crtc, high_crtc;
 
 	if ((!drm_dev_to_irq(dev)) || (!dev->irq_enabled))
@@ -1258,14 +1288,9 @@ void drm_handle_vblank_events(struct drm_device *dev, int crtc)
 		DRM_DEBUG("vblank event on %d, current %d\n",
 			  e->event.sequence, seq);
 
-		e->event.sequence = seq;
-		e->event.tv_sec = now.tv_sec;
-		e->event.tv_usec = now.tv_usec;
+		list_del(&e->base.link);
 		drm_vblank_put(dev, e->pipe);
-		list_move_tail(&e->base.link, &e->base.file_priv->event_list);
-		wake_up_interruptible(&e->base.file_priv->event_wait);
-		trace_drm_vblank_event_delivered(e->base.pid, e->pipe,
-						 e->event.sequence);
+		send_vblank_event(dev, e, seq, &now);
 	}
 
 	spin_unlock_irqrestore(&dev->event_lock, flags);

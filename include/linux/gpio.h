@@ -20,6 +20,11 @@
 /* Gpio pin is open source */
 #define GPIOF_OPEN_SOURCE	(1 << 3)
 
+#define GPIOF_EXPORT		(1 << 2)
+#define GPIOF_EXPORT_CHANGEABLE	(1 << 3)
+#define GPIOF_EXPORT_DIR_FIXED	(GPIOF_EXPORT)
+#define GPIOF_EXPORT_DIR_CHANGEABLE (GPIOF_EXPORT | GPIOF_EXPORT_CHANGEABLE)
+
 /**
  * struct gpio - a structure describing a GPIO with configuration
  * @gpio:	the GPIO number
@@ -35,7 +40,7 @@ struct gpio {
 #ifdef CONFIG_GENERIC_GPIO
 #include <asm/gpio.h>
 
-#else
+#else /* ! CONFIG_GENERIC_GPIO */
 
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -172,6 +177,29 @@ static inline int irq_to_gpio(unsigned irq)
 	return -EINVAL;
 }
 
-#endif
+static inline int
+gpiochip_add_pin_range(struct gpio_chip *chip, const char *pinctl_name,
+		       unsigned int gpio_offset, unsigned int pin_offset,
+		       unsigned int npins)
+{
+	WARN_ON(1);
+	return -EINVAL;
+}
+
+static inline void
+gpiochip_remove_pin_ranges(struct gpio_chip *chip)
+{
+	WARN_ON(1);
+}
+
+#endif /* ! CONFIG_GENERIC_GPIO */
+
+struct device;
+
+/* bindings for managed devices that want to request gpios */
+int devm_gpio_request(struct device *dev, unsigned gpio, const char *label);
+int devm_gpio_request_one(struct device *dev, unsigned gpio,
+			  unsigned long flags, const char *label);
+void devm_gpio_free(struct device *dev, unsigned int gpio);
 
 #endif /* __LINUX_GPIO_H */

@@ -946,7 +946,7 @@ static bool intel_sdvo_set_tv_format(struct intel_sdvo *intel_sdvo)
 
 static bool
 intel_sdvo_set_output_timings_from_mode(struct intel_sdvo *intel_sdvo,
-					struct drm_display_mode *mode)
+					const struct drm_display_mode *mode)
 {
 	struct intel_sdvo_dtd output_dtd;
 
@@ -986,7 +986,7 @@ intel_sdvo_set_input_timings_for_mode(struct intel_sdvo *intel_sdvo,
 }
 
 static bool intel_sdvo_mode_fixup(struct drm_encoder *encoder,
-				  struct drm_display_mode *mode,
+				  const struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
 {
 	struct intel_sdvo *intel_sdvo = to_intel_sdvo(encoder);
@@ -1344,7 +1344,6 @@ intel_sdvo_tmds_sink_detect(struct drm_connector *connector)
 			}
 		} else
 			status = connector_status_disconnected;
-		connector->display_info.raw_edid = NULL;
 		kfree(edid);
 	}
 
@@ -1419,7 +1418,6 @@ intel_sdvo_detect(struct drm_connector *connector, bool force)
 			else
 				ret = connector_status_disconnected;
 
-			connector->display_info.raw_edid = NULL;
 			kfree(edid);
 		} else
 			ret = connector_status_connected;
@@ -1465,7 +1463,6 @@ static void intel_sdvo_get_ddc_modes(struct drm_connector *connector)
 			drm_add_edid_modes(connector, edid);
 		}
 
-		connector->display_info.raw_edid = NULL;
 		kfree(edid);
 	}
 }
