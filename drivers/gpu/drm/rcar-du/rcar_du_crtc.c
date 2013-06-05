@@ -497,7 +497,6 @@ static void rcar_du_crtc_finish_page_flip(struct rcar_du_crtc *rcrtc)
 {
 	struct drm_pending_vblank_event *event;
 	struct drm_device *dev = rcrtc->crtc.dev;
-	struct timeval vblanktime;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->event_lock, flags);
@@ -508,14 +507,8 @@ static void rcar_du_crtc_finish_page_flip(struct rcar_du_crtc *rcrtc)
 	if (event == NULL)
 		return;
 
-	event->event.sequence =
-		drm_vblank_count_and_time(dev, rcrtc->index, &vblanktime);
-	event->event.tv_sec = vblanktime.tv_sec;
-	event->event.tv_usec = vblanktime.tv_usec;
-
 	spin_lock_irqsave(&dev->event_lock, flags);
-	list_add_tail(&event->base.link, &event->base.file_priv->event_list);
-	wake_up_interruptible(&event->base.file_priv->event_wait);
+	drm_send_vblank_event(dev, rcrtc->index, event);
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	drm_vblank_put(dev, rcrtc->index);
