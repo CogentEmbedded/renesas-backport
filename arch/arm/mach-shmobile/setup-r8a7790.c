@@ -27,6 +27,7 @@
 #include <linux/platform_data/gpio-rcar.h>
 #include <linux/platform_data/rcar-du.h>
 #include <linux/platform_data/irq-renesas-irqc.h>
+#include <linux/platform_data/vsp1.h>
 #include <mach/common.h>
 #include <mach/irqs.h>
 #include <mach/r8a7790.h>
@@ -64,6 +65,54 @@ void __init r8a7790_add_du_device(struct rcar_du_platform_data *pdata)
 		.size_data = sizeof(*pdata),
 		.dma_mask = DMA_BIT_MASK(32),
 	};
+
+	platform_device_register_full(&info);
+}
+
+/* VSP1 */
+static const struct resource vsp1_0_resources[] = {
+	DEFINE_RES_MEM(0xfe920000, 0x8000),
+	DEFINE_RES_IRQ(gic_spi(266)),
+};
+
+static const struct resource vsp1_1_resources[] = {
+	DEFINE_RES_MEM(0xfe928000, 0x8000),
+	DEFINE_RES_IRQ(gic_spi(267)),
+};
+
+static const struct resource vsp1_2_resources[] = {
+	DEFINE_RES_MEM(0xfe930000, 0x8000),
+	DEFINE_RES_IRQ(gic_spi(246)),
+};
+
+static const struct resource vsp1_3_resources[] = {
+	DEFINE_RES_MEM(0xfe938000, 0x8000),
+	DEFINE_RES_IRQ(gic_spi(247)),
+};
+
+static const struct resource *vsp1_resources[4] = {
+	vsp1_0_resources,
+	vsp1_1_resources,
+	vsp1_2_resources,
+	vsp1_3_resources,
+};
+
+void __init r8a7790_add_vsp1_device(struct vsp1_platform_data *pdata,
+				    unsigned int index)
+{
+	struct platform_device_info info = {
+		.name = "vsp1",
+		.id = index,
+		.data = pdata,
+		.size_data = sizeof(*pdata),
+		.num_res = 2,
+		.dma_mask = DMA_BIT_MASK(32),
+	};
+
+	if (index >= ARRAY_SIZE(vsp1_resources))
+		return;
+
+	info.res = vsp1_resources[index];
 
 	platform_device_register_full(&info);
 }
