@@ -121,9 +121,9 @@ static struct media_entity *stack_pop(struct media_entity_graph *graph)
 	return entity;
 }
 
-#define stack_peek(en)	((en)->stack[(en)->top - 1].entity)
-#define link_top(en)	((en)->stack[(en)->top].link)
-#define stack_top(en)	((en)->stack[(en)->top].entity)
+#define stack_peek(en, i)	((en)->stack[i].entity)
+#define link_top(en)		((en)->stack[(en)->top].link)
+#define stack_top(en)		((en)->stack[(en)->top].entity)
 
 /**
  * media_entity_graph_walk_start - Start walking the media graph at a given entity
@@ -159,6 +159,8 @@ EXPORT_SYMBOL_GPL(media_entity_graph_walk_start);
 struct media_entity *
 media_entity_graph_walk_next(struct media_entity_graph *graph)
 {
+	unsigned int i;
+
 	if (stack_top(graph) == NULL)
 		return NULL;
 
@@ -181,8 +183,13 @@ media_entity_graph_walk_next(struct media_entity_graph *graph)
 		/* Get the entity in the other end of the link . */
 		next = media_entity_other(entity, link);
 
-		/* Was it the entity we came here from? */
-		if (next == stack_peek(graph)) {
+		/* Is the entity already in the path? */
+		for (i = 1; i < graph->top; ++i) {
+			if (next == stack_peek(graph, i))
+				break;
+		}
+
+		if (i < graph->top) {
 			link_top(graph)++;
 			continue;
 		}
