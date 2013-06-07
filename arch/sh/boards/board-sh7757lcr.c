@@ -79,7 +79,7 @@ static struct sh_eth_plat_data sh7757_eth0_pdata = {
 };
 
 static struct platform_device sh7757_eth0_device = {
-	.name		= "sh-eth",
+	.name		= "sh7757-ether",
 	.resource	= sh_eth0_resources,
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(sh_eth0_resources),
@@ -108,7 +108,7 @@ static struct sh_eth_plat_data sh7757_eth1_pdata = {
 };
 
 static struct platform_device sh7757_eth1_device = {
-	.name		= "sh-eth",
+	.name		= "sh7757-ether",
 	.resource	= sh_eth1_resources,
 	.id		= 1,
 	.num_resources	= ARRAY_SIZE(sh_eth1_resources),
@@ -154,7 +154,7 @@ static struct sh_eth_plat_data sh7757_eth_giga0_pdata = {
 };
 
 static struct platform_device sh7757_eth_giga0_device = {
-	.name		= "sh-eth",
+	.name		= "sh7757-gether",
 	.resource	= sh_eth_giga0_resources,
 	.id		= 2,
 	.num_resources	= ARRAY_SIZE(sh_eth_giga0_resources),
@@ -189,7 +189,7 @@ static struct sh_eth_plat_data sh7757_eth_giga1_pdata = {
 };
 
 static struct platform_device sh7757_eth_giga1_device = {
-	.name		= "sh-eth",
+	.name		= "sh7757-gether",
 	.resource	= sh_eth_giga1_resources,
 	.id		= 3,
 	.num_resources	= ARRAY_SIZE(sh_eth_giga1_resources),
