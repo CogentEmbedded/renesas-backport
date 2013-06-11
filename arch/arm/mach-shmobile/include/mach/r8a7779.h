@@ -5,6 +5,7 @@
 #include <linux/pm_domain.h>
 
 struct platform_device;
+struct rcar_du_platform_data;
 
 struct r8a7779_pm_ch {
 	unsigned long chan_offs;
@@ -22,6 +23,7 @@ static inline struct r8a7779_pm_ch *to_r8a7779_ch(struct generic_pm_domain *d)
 	return &container_of(d, struct r8a7779_pm_domain, genpd)->ch;
 }
 
+extern void r8a7779_add_du_device(struct rcar_du_platform_data *pdata);
 extern int r8a7779_sysc_power_down(struct r8a7779_pm_ch *r8a7779_ch);
 extern int r8a7779_sysc_power_up(struct r8a7779_pm_ch *r8a7779_ch);
 
