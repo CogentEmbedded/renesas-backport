@@ -47,6 +47,7 @@
 #define CPG_BASE 0xe6150000
 #define CPG_LEN 0x1000
 
+#define MSTPSR1 (void __iomem *)0xe6150038
 #define SMSTPCR1 0xe6150134
 #define SMSTPCR2 0xe6150138
 #define SMSTPCR3 0xe615013c
@@ -215,10 +216,10 @@ static struct clk mstp_clks[MSTP_NR] = {
 	[MSTP522] = SH_CLK_MSTP32(&extal_clk, SMSTPCR5, 22, 0), /* Thermal */
 	[MSTP717] = SH_CLK_MSTP32(&zs_clk, SMSTPCR7, 17, 0), /* HSCIF0 */
 	[MSTP716] = SH_CLK_MSTP32(&zs_clk, SMSTPCR7, 16, 0), /* HSCIF1 */
-	[MSTP131] = SH_CLK_MSTP32(&zg_clk, SMSTPCR1, 31, 0), /* VSP1 (SY) */
-	[MSTP130] = SH_CLK_MSTP32(&zg_clk, SMSTPCR1, 30, 0), /* VSP1 (RT) */
-	[MSTP128] = SH_CLK_MSTP32(&zg_clk, SMSTPCR1, 28, 0), /* VSP1 (DU0) */
-	[MSTP127] = SH_CLK_MSTP32(&zg_clk, SMSTPCR1, 27, 0), /* VSP1 (DU1) */
+	[MSTP131] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 31, MSTPSR1, 0), /* VSP1 (SY) */
+	[MSTP130] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 30, MSTPSR1, 0), /* VSP1 (RT) */
+	[MSTP128] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 28, MSTPSR1, 0), /* VSP1 (DU0) */
+	[MSTP127] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 27, MSTPSR1, 0), /* VSP1 (DU1) */
 };
 
 static struct clk_lookup lookups[] = {
