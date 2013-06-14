@@ -25,7 +25,7 @@
 
 static int rcar_du_vga_connector_get_modes(struct drm_connector *connector)
 {
-	return drm_add_modes_noedid(connector, 1280, 768);
+	return 0;
 }
 
 static int rcar_du_vga_connector_mode_valid(struct drm_connector *connector,
