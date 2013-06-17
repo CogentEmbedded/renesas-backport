@@ -46,6 +46,8 @@ void __init r8a7790_pinmux_init(void)
 /* DU */
 static const struct resource du_resources[] = {
 	DEFINE_RES_MEM(0xfeb00000, 0x70000),
+	DEFINE_RES_MEM_NAMED(0xfeb90000, 0x1c, "lvds.0"),
+	DEFINE_RES_MEM_NAMED(0xfeb94000, 0x1c, "lvds.1"),
 	DEFINE_RES_IRQ(gic_spi(256)),
 	DEFINE_RES_IRQ(gic_spi(268)),
 	DEFINE_RES_IRQ(gic_spi(269)),
