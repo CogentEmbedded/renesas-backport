@@ -28,10 +28,10 @@
 #include <linux/leds.h>
 #include <linux/dma-mapping.h>
 #include <linux/pinctrl/machine.h>
+#include <linux/platform_data/rcar-du.h>
 #include <linux/regulator/fixed.h>
 #include <linux/regulator/machine.h>
 #include <linux/smsc911x.h>
-#include <linux/platform_data/rcar-du.h>
 #include <mach/hardware.h>
 #include <mach/r8a7779.h>
 #include <mach/common.h>
@@ -83,12 +83,12 @@ static struct platform_device eth_device = {
  */
 static struct rcar_du_encoder_data du_encoders[] = {
 	{
-		.encoder = RCAR_DU_ENCODER_VGA,
-		.output = 0,
+		.type = RCAR_DU_ENCODER_VGA,
+		.output = RCAR_DU_OUTPUT_DPAD0,
 	}, {
-		.encoder = RCAR_DU_ENCODER_LVDS,
-		.output = 1,
-		.u.lvds.panel = {
+		.type = RCAR_DU_ENCODER_LVDS,
+		.output = RCAR_DU_OUTPUT_DPAD1,
+		.connector.lvds.panel = {
 			.width_mm = 210,
 			.height_mm = 158,
 			.mode = {

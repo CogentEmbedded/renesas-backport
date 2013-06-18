@@ -25,7 +25,6 @@
 #include <linux/platform_data/rcar-du.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
-#include <linux/dma-mapping.h>
 #include <linux/input.h>
 #include <linux/io.h>
 #include <linux/serial_sci.h>
@@ -447,7 +446,7 @@ void __init r8a7779_add_standard_devices(void)
 void __init r8a7779_add_du_device(struct rcar_du_platform_data *pdata)
 {
 	struct platform_device_info info = {
-		.name = "rcar-du",
+		.name = "rcar-du-r8a7779",
 		.id = -1,
 		.res = du_resources,
 		.num_res = ARRAY_SIZE(du_resources),
