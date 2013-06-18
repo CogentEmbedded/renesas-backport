@@ -31,7 +31,6 @@
 #include <linux/regulator/fixed.h>
 #include <linux/regulator/machine.h>
 #include <linux/smsc911x.h>
-#include <linux/platform_data/rcar-du.h>
 #include <mach/hardware.h>
 #include <mach/r8a7779.h>
 #include <mach/common.h>
@@ -77,42 +76,6 @@ static struct platform_device eth_device = {
 	.num_resources	= ARRAY_SIZE(smsc911x_resources),
 };
 
-/* DU
- *
- * The panel only specifies the [hv]display and [hv]total values. The position
- * and width of the sync pulses don't matter, they're copied from VESA timings.
- */
-static struct rcar_du_encoder_data du_encoders[] = {
-	{
-		.encoder = RCAR_DU_ENCODER_VGA,
-		.output = 0,
-	}, {
-		.encoder = RCAR_DU_ENCODER_LVDS,
-		.output = 1,
-		.u.lvds.panel = {
-			.width_mm = 210,
-			.height_mm = 158,
-			.mode = {
-				.clock = 65000,
-				.hdisplay = 1024,
-				.hsync_start = 1048,
-				.hsync_end = 1184,
-				.htotal = 1344,
-				.vdisplay = 768,
-				.vsync_start = 771,
-				.vsync_end = 777,
-				.vtotal = 806,
-				.flags = 0,
-			},
-		},
-	},
-};
-
-static struct rcar_du_platform_data du_pdata = {
-	.encoders = du_encoders,
-	.num_encoders = ARRAY_SIZE(du_encoders),
-};
-
 /* LEDS */
 static struct gpio_led marzen_leds[] = {
 	{
@@ -149,19 +112,6 @@ static struct platform_device *marzen_devices[] __initdata = {
 };
 
 static const struct pinctrl_map marzen_pinctrl_map[] = {
-	/* DU (CN10: ARGB0, CN13: LVDS) */
-	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du", "pfc-r8a7779",
-				  "du0_rgb888", "du0"),
-	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du", "pfc-r8a7779",
-				  "du0_sync_1", "du0"),
-	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du", "pfc-r8a7779",
-				  "du0_clk_out_0", "du0"),
-	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du", "pfc-r8a7779",
-				  "du1_rgb666", "du1"),
-	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du", "pfc-r8a7779",
-				  "du1_sync_1", "du1"),
-	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du", "pfc-r8a7779",
-				  "du1_clk_out", "du1"),
 	/* SCIF2 (CN18: DEBUG0) */
 	PIN_MAP_MUX_GROUP_DEFAULT("sh-sci.2", "pfc-r8a7779",
 				  "scif2_data_c", "scif2"),
@@ -194,7 +144,6 @@ static void __init marzen_init(void)
 
 	r8a7779_add_standard_devices();
 	platform_add_devices(marzen_devices, ARRAY_SIZE(marzen_devices));
-	r8a7779_add_du_device(&du_pdata);
 }
 
 MACHINE_START(MARZEN, "marzen")
