@@ -124,7 +124,23 @@ static int arch_timer_set_next_event_phys(unsigned long evt,
 
 static int __cpuinit arch_timer_setup(struct clock_event_device *clk)
 {
-	clk->features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_C3STOP;
+	clk->features = CLOCK_EVT_FEAT_ONESHOT;
+#ifdef CONFIG_CPU_IDLE
+	/* By not setting the C3STOP flag it is possible to let the
+	 * ARM architected timer to be the only clock event installed
+	 * on the system and have working high resolution timers.
+	 *
+	 * If the C3STOP flag is set unconditionally then the kernel
+	 * will always prevent using the high resoultion timer feature
+	 * unless an additional clock event is registered.
+	 *
+	 * In the case where CPU_IDLE is enabled then there is a chance
+	 * that deeper sleep states will be handled by software, but
+	 * if CPU_IDLE is disabled then deep sleep states cannot be
+	 * entered and the feature flagged by C3STOP is not needed.
+	 */
+	clk->features |= CLOCK_EVT_FEAT_C3STOP;
+#endif
 	clk->name = "arch_sys_timer";
 	clk->rating = 450;
 	if (arch_timer_use_virtual) {
