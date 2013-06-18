@@ -19,10 +19,10 @@
 
 #include "rcar_du_crtc.h"
 #include "rcar_du_drv.h"
+#include "rcar_du_encoder.h"
 #include "rcar_du_kms.h"
-#include "rcar_du_lvds.h"
+#include "rcar_du_lvdsenc.h"
 #include "rcar_du_regs.h"
-#include "rcar_du_vga.h"
 
 /* -----------------------------------------------------------------------------
  * Format helpers
@@ -106,43 +106,36 @@ const struct rcar_du_format_info *rcar_du_format_info(u32 fourcc)
 }
 
 /* -----------------------------------------------------------------------------
- * Common connector and encoder functions
- */
-
-struct drm_encoder *
-rcar_du_connector_best_encoder(struct drm_connector *connector)
-{
-	struct rcar_du_connector *rcon = to_rcar_connector(connector);
-
-	return &rcon->encoder->encoder;
-}
-
-void rcar_du_encoder_mode_prepare(struct drm_encoder *encoder)
-{
-}
-
-void rcar_du_encoder_mode_set(struct drm_encoder *encoder,
-			      struct drm_display_mode *mode,
-			      struct drm_display_mode *adjusted_mode)
-{
-	struct rcar_du_encoder *renc = to_rcar_encoder(encoder);
-
-	rcar_du_crtc_route_output(encoder->crtc, renc->output);
-}
-
-void rcar_du_encoder_mode_commit(struct drm_encoder *encoder)
-{
-}
-
-/* -----------------------------------------------------------------------------
  * Frame buffer
  */
+
+int rcar_du_dumb_create(struct drm_file *file, struct drm_device *dev,
+			struct drm_mode_create_dumb *args)
+{
+	struct rcar_du_device *rcdu = dev->dev_private;
+	unsigned int min_pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
+	unsigned int align;
+
+	/* The R8A7779 DU requires a 16 pixels pitch alignment as documented,
+	 * but the R8A7790 DU seems to require a 128 bytes pitch alignment.
+	 */
+	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_ALIGN_128B))
+		align = 128;
+	else
+		align = 16 * args->bpp / 8;
+
+	args->pitch = roundup(max(args->pitch, min_pitch), align);
+
+	return drm_gem_cma_dumb_create(file, dev, args);
+}
 
 static struct drm_framebuffer *
 rcar_du_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		  struct drm_mode_fb_cmd2 *mode_cmd)
 {
+	struct rcar_du_device *rcdu = dev->dev_private;
 	const struct rcar_du_format_info *format;
+	unsigned int align;
 
 	format = rcar_du_format_info(mode_cmd->pixel_format);
 	if (format == NULL) {
@@ -151,7 +144,13 @@ rcar_du_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (mode_cmd->pitches[0] & 15 || mode_cmd->pitches[0] >= 8192) {
+	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_ALIGN_128B))
+		align = 128;
+	else
+		align = 16 * format->bpp / 8;
+
+	if (mode_cmd->pitches[0] & (align - 1) ||
+	    mode_cmd->pitches[0] >= 8192) {
 		dev_dbg(dev->dev, "invalid pitch value %u\n",
 			mode_cmd->pitches[0]);
 		return ERR_PTR(-EINVAL);
@@ -182,9 +181,14 @@ static const struct drm_mode_config_funcs rcar_du_mode_config_funcs = {
 
 int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 {
+	static const unsigned int mmio_offsets[] = {
+		DU0_REG_OFFSET, DU2_REG_OFFSET
+	};
+
 	struct drm_device *dev = rcdu->ddev;
 	struct drm_encoder *encoder;
 	struct drm_fbdev_cma *fbdev;
+	unsigned int num_groups;
 	unsigned int i;
 	int ret;
 
@@ -196,55 +200,76 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 	dev->mode_config.max_height = 2047;
 	dev->mode_config.funcs = &rcar_du_mode_config_funcs;
 
-	ret = rcar_du_plane_init(rcdu);
+	rcdu->num_crtcs = rcdu->info->num_crtcs;
+
+	/* Initialize the groups. */
+	num_groups = DIV_ROUND_UP(rcdu->num_crtcs, 2);
+
+	for (i = 0; i < num_groups; ++i) {
+		struct rcar_du_group *rgrp = &rcdu->groups[i];
+
+		rgrp->dev = rcdu;
+		rgrp->mmio_offset = mmio_offsets[i];
+		rgrp->index = i;
+
+		ret = rcar_du_planes_init(rgrp);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Create the CRTCs. */
+	for (i = 0; i < rcdu->num_crtcs; ++i) {
+		struct rcar_du_group *rgrp = &rcdu->groups[i / 2];
+
+		ret = rcar_du_crtc_create(rgrp, i);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Initialize the encoders. */
+	ret = rcar_du_lvdsenc_init(rcdu);
 	if (ret < 0)
 		return ret;
-
-	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i)
-		rcar_du_crtc_create(rcdu, i);
-
-	rcdu->used_crtcs = 0;
-	rcdu->num_crtcs = i;
 
 	for (i = 0; i < rcdu->pdata->num_encoders; ++i) {
 		const struct rcar_du_encoder_data *pdata =
 			&rcdu->pdata->encoders[i];
+		const struct rcar_du_output_routing *route =
+			&rcdu->info->routes[pdata->output];
 
-		if (pdata->output >= ARRAY_SIZE(rcdu->crtcs)) {
+		if (pdata->type == RCAR_DU_ENCODER_UNUSED)
+			continue;
+
+		if (pdata->output >= RCAR_DU_OUTPUT_MAX ||
+		    route->possible_crtcs == 0) {
 			dev_warn(rcdu->dev,
 				 "encoder %u references unexisting output %u, skipping\n",
 				 i, pdata->output);
 			continue;
 		}
 
-		switch (pdata->encoder) {
-		case RCAR_DU_ENCODER_VGA:
-			rcar_du_vga_init(rcdu, &pdata->u.vga, pdata->output);
-			break;
-
-		case RCAR_DU_ENCODER_LVDS:
-			rcar_du_lvds_init(rcdu, &pdata->u.lvds, pdata->output);
-			break;
-
-		default:
-			break;
-		}
+		rcar_du_encoder_init(rcdu, pdata->type, pdata->output, pdata);
 	}
 
-	/* Set the possible CRTCs and possible clones. All encoders can be
-	 * driven by the CRTC associated with the output they're connected to,
-	 * as well as by CRTC 0.
+	/* Set the possible CRTCs and possible clones. There's always at least
+	 * one way for all encoders to clone each other, set all bits in the
+	 * possible clones field.
 	 */
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		struct rcar_du_encoder *renc = to_rcar_encoder(encoder);
+		const struct rcar_du_output_routing *route =
+			&rcdu->info->routes[renc->output];
 
-		encoder->possible_crtcs = (1 << 0) | (1 << renc->output);
-		encoder->possible_clones = 1 << 0;
+		encoder->possible_crtcs = route->possible_crtcs;
+		encoder->possible_clones = (1 << rcdu->pdata->num_encoders) - 1;
 	}
 
-	ret = rcar_du_plane_register(rcdu);
-	if (ret < 0)
-		return ret;
+	/* Now that the CRTCs have been initialized register the planes. */
+	for (i = 0; i < num_groups; ++i) {
+		ret = rcar_du_planes_register(&rcdu->groups[i]);
+		if (ret < 0)
+			return ret;
+	}
 
 	drm_kms_helper_poll_init(dev);
 

@@ -18,6 +18,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
@@ -74,6 +75,8 @@ struct intc_irqpin_priv {
 	struct platform_device *pdev;
 	struct irq_chip irq_chip;
 	struct irq_domain *irq_domain;
+	bool shared_irqs;
+	u8 shared_irq_mask;
 };
 
 static unsigned long intc_irqpin_read32(void __iomem *iomem)
@@ -193,6 +196,28 @@ static void intc_irqpin_irq_disable(struct irq_data *d)
 	intc_irqpin_irq_write_hwirq(p, INTC_IRQPIN_REG_MASK, hw_irq);
 }
 
+static void intc_irqpin_shared_irq_enable(struct irq_data *d)
+{
+	struct intc_irqpin_priv *p = irq_data_get_irq_chip_data(d);
+	int hw_irq = irqd_to_hwirq(d);
+
+	intc_irqpin_dbg(&p->irq[hw_irq], "shared enable");
+	intc_irqpin_irq_write_hwirq(p, INTC_IRQPIN_REG_CLEAR, hw_irq);
+
+	p->shared_irq_mask &= ~BIT(hw_irq);
+}
+
+static void intc_irqpin_shared_irq_disable(struct irq_data *d)
+{
+	struct intc_irqpin_priv *p = irq_data_get_irq_chip_data(d);
+	int hw_irq = irqd_to_hwirq(d);
+
+	intc_irqpin_dbg(&p->irq[hw_irq], "shared disable");
+	intc_irqpin_irq_write_hwirq(p, INTC_IRQPIN_REG_MASK, hw_irq);
+
+	p->shared_irq_mask |= BIT(hw_irq);
+}
+
 static void intc_irqpin_irq_enable_force(struct irq_data *d)
 {
 	struct intc_irqpin_priv *p = irq_data_get_irq_chip_data(d);
@@ -261,6 +286,25 @@ static irqreturn_t intc_irqpin_irq_handler(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
+static irqreturn_t intc_irqpin_shared_irq_handler(int irq, void *dev_id)
+{
+	struct intc_irqpin_priv *p = dev_id;
+	unsigned int reg_source = intc_irqpin_read(p, INTC_IRQPIN_REG_SOURCE);
+	irqreturn_t status = IRQ_NONE;
+	int k;
+
+	for (k = 0; k < 8; k++) {
+		if (reg_source & BIT(7 - k)) {
+			if (BIT(k) & p->shared_irq_mask)
+				continue;
+
+			status |= intc_irqpin_irq_handler(irq, &p->irq[k]);
+		}
+	}
+
+	return status;
+}
+
 static int intc_irqpin_irq_domain_map(struct irq_domain *h, unsigned int virq,
 				      irq_hw_number_t hw)
 {
@@ -292,6 +336,7 @@ static int intc_irqpin_probe(struct platform_device *pdev)
 	void (*enable_fn)(struct irq_data *d);
 	void (*disable_fn)(struct irq_data *d);
 	const char *name = dev_name(&pdev->dev);
+	int ref_irq;
 	int ret;
 	int k;
 
@@ -305,6 +350,9 @@ static int intc_irqpin_probe(struct platform_device *pdev)
 	/* deal with driver instance configuration */
 	if (pdata)
 		memcpy(&p->config, pdata, sizeof(*pdata));
+	else
+		of_property_read_u32(pdev->dev.of_node, "sense-bitfield-width",
+				     &p->config.sense_bitfield_width);
 	if (!p->config.sense_bitfield_width)
 		p->config.sense_bitfield_width = 4; /* default to 4 bits */
 
@@ -372,13 +420,29 @@ static int intc_irqpin_probe(struct platform_device *pdev)
 	for (k = 0; k < p->number_of_irqs; k++)
 		intc_irqpin_mask_unmask_prio(p, k, 1);
 
+	/* clear all pending interrupts */
+	intc_irqpin_write(p, INTC_IRQPIN_REG_SOURCE, 0x0);
+
+	/* scan for shared interrupt lines */
+	ref_irq = p->irq[0].requested_irq;
+	p->shared_irqs = true;
+	for (k = 1; k < p->number_of_irqs; k++) {
+		if (ref_irq != p->irq[k].requested_irq) {
+			p->shared_irqs = false;
+			break;
+		}
+	}
+
 	/* use more severe masking method if requested */
 	if (p->config.control_parent) {
 		enable_fn = intc_irqpin_irq_enable_force;
 		disable_fn = intc_irqpin_irq_disable_force;
-	} else {
+	} else if (!p->shared_irqs) {
 		enable_fn = intc_irqpin_irq_enable;
 		disable_fn = intc_irqpin_irq_disable;
+	} else {
+		enable_fn = intc_irqpin_shared_irq_enable;
+		disable_fn = intc_irqpin_shared_irq_disable;
 	}
 
 	irq_chip = &p->irq_chip;
@@ -400,17 +464,33 @@ static int intc_irqpin_probe(struct platform_device *pdev)
 		goto err0;
 	}
 
-	/* request and set priority on interrupts one by one */
-	for (k = 0; k < p->number_of_irqs; k++) {
-		if (devm_request_irq(&pdev->dev, p->irq[k].requested_irq,
-				     intc_irqpin_irq_handler,
-				     0, name, &p->irq[k])) {
+	if (p->shared_irqs) {
+		/* request one shared interrupt */
+		if (devm_request_irq(&pdev->dev, p->irq[0].requested_irq,
+				intc_irqpin_shared_irq_handler,
+				IRQF_SHARED, name, p)) {
 			dev_err(&pdev->dev, "failed to request low IRQ\n");
 			ret = -ENOENT;
 			goto err1;
 		}
-		intc_irqpin_mask_unmask_prio(p, k, 0);
+	} else {
+		/* request interrupts one by one */
+		for (k = 0; k < p->number_of_irqs; k++) {
+			if (devm_request_irq(&pdev->dev,
+					p->irq[k].requested_irq,
+					intc_irqpin_irq_handler,
+					0, name, &p->irq[k])) {
+				dev_err(&pdev->dev,
+					"failed to request low IRQ\n");
+				ret = -ENOENT;
+				goto err1;
+			}
+		}
 	}
+
+	/* unmask all interrupts on prio level */
+	for (k = 0; k < p->number_of_irqs; k++)
+		intc_irqpin_mask_unmask_prio(p, k, 0);
 
 	dev_info(&pdev->dev, "driving %d irqs\n", p->number_of_irqs);
 
