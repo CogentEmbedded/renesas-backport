@@ -50,38 +50,84 @@ static void rcar_du_plane_write(struct rcar_du_group *rgrp,
 		      data);
 }
 
-int rcar_du_plane_reserve(struct rcar_du_plane *plane,
-			  const struct rcar_du_format_info *format)
+/*
+ * The R8A7790 DU can source frames directly from the VSP1 devices VSPD0 and
+ * VSPD1. VSPD0 feeds DU0/1 plane 0, and VSPD1 feeds either DU2 plane 0 or
+ * DU0/1 plane 1.
+ *
+ * Allocate the correct fixed plane when sourcing frames from VSPD0 or VSPD1,
+ * and allocate planes in reverse index order otherwise to ensure maximum
+ * availability of planes 0 and 1.
+ *
+ * The caller is responsible for ensuring that the requested source is
+ * compatible with the DU revision.
+ */
+static int rcar_du_plane_find(struct rcar_du_group *rgrp, unsigned int count,
+			      enum rcar_du_plane_source source)
 {
-	struct rcar_du_group *rgrp = plane->group;
-	unsigned int i;
-	int ret = -EBUSY;
+	int fixed = -1;
+	int i;
 
-	mutex_lock(&rgrp->planes.lock);
+	if (source == RCAR_DU_PLANE_VSPD0) {
+		/* VSPD1 feeds plane 0 on DU0/1. */
+		if (rgrp->index != 0)
+			return -EINVAL;
 
-	for (i = 0; i < ARRAY_SIZE(rgrp->planes.planes); ++i) {
+		fixed = 0;
+	} else if (source == RCAR_DU_PLANE_VSPD1) {
+		/* VSPD1 feeds plane 1 on DU0/1 or plane 0 on DU2. */
+		fixed = rgrp->index == 0 ? 1 : 0;
+	}
+
+	if (fixed >= 0)
+		return rgrp->planes.free & (1 << fixed) ? fixed : -EBUSY;
+
+	for (i = ARRAY_SIZE(rgrp->planes.planes) - 1; i >= 0; --i) {
 		if (!(rgrp->planes.free & (1 << i)))
 			continue;
 
-		if (format->planes == 1 ||
+		if (count == 1 ||
 		    rgrp->planes.free & (1 << ((i + 1) % 8)))
 			break;
 	}
 
-	if (i == ARRAY_SIZE(rgrp->planes.planes))
+	return i < 0 ? -EBUSY : i;
+}
+
+static int __rcar_du_plane_reserve(struct rcar_du_plane *plane,
+				   const struct rcar_du_format_info *format,
+				   enum rcar_du_plane_source source)
+{
+	struct rcar_du_group *rgrp = plane->group;
+	unsigned int hwindex;
+	int ret;
+
+	mutex_lock(&rgrp->planes.lock);
+
+	ret = rcar_du_plane_find(rgrp, format->planes, source);
+	if (ret < 0)
 		goto done;
 
-	rgrp->planes.free &= ~(1 << i);
-	if (format->planes == 2)
-		rgrp->planes.free &= ~(1 << ((i + 1) % 8));
+	hwindex = ret;
 
-	plane->hwindex = i;
+	rgrp->planes.free &= ~(1 << hwindex);
+	if (format->planes == 2)
+		rgrp->planes.free &= ~(1 << ((hwindex + 1) % 8));
+
+	plane->hwindex = hwindex;
+	plane->source = source;
 
 	ret = 0;
 
 done:
 	mutex_unlock(&rgrp->planes.lock);
 	return ret;
+}
+
+int rcar_du_plane_reserve(struct rcar_du_plane *plane,
+			  const struct rcar_du_format_info *format)
+{
+	return __rcar_du_plane_reserve(plane, format, RCAR_DU_PLANE_MEMORY);
 }
 
 void rcar_du_plane_release(struct rcar_du_plane *plane)

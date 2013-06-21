@@ -32,6 +32,12 @@ struct rcar_du_group;
 #define RCAR_DU_NUM_HW_PLANES		8
 #define RCAR_DU_NUM_SW_PLANES		9
 
+enum rcar_du_plane_source {
+	RCAR_DU_PLANE_MEMORY,
+	RCAR_DU_PLANE_VSPD0,
+	RCAR_DU_PLANE_VSPD1,
+};
+
 struct rcar_du_plane {
 	struct rcar_du_group *group;
 	struct drm_crtc *crtc;
@@ -39,6 +45,8 @@ struct rcar_du_plane {
 	bool enabled;
 
 	int hwindex;		/* 0-based, -1 means unused */
+	enum rcar_du_plane_source source;
+
 	unsigned int alpha;
 	unsigned int colorkey;
 	unsigned int zpos;
