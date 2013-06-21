@@ -30,6 +30,7 @@ struct rcar_du_lvdsenc;
 #define RCAR_DU_FEATURE_CRTC_IRQ_CLOCK	(1 << 0)	/* Per-CRTC IRQ and clock */
 #define RCAR_DU_FEATURE_ALIGN_128B	(1 << 1)	/* Align pitches to 128 bytes */
 #define RCAR_DU_FEATURE_DEFR8		(1 << 2)	/* Has DEFR8 register */
+#define RCAR_DU_FEATURE_VSP1_SOURCE	(1 << 3)	/* Has inputs from VSP1 */
 
 /*
  * struct rcar_du_output_routing - Output routing specification
@@ -75,6 +76,8 @@ struct rcar_du_device {
 	struct rcar_du_group groups[2];
 
 	unsigned int dpad0_source;
+	unsigned int vspd1_sink;
+
 	struct rcar_du_lvdsenc *lvds[2];
 };
 

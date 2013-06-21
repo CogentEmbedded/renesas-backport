@@ -19,6 +19,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 
+struct rcar_du_device;
 struct rcar_du_format_info;
 struct rcar_du_group;
 
@@ -74,6 +75,8 @@ struct rcar_du_planes {
 	struct drm_property *colorkey;
 	struct drm_property *zpos;
 };
+
+int rcar_du_vsp1_sources_init(struct rcar_du_device *rcdu);
 
 int rcar_du_planes_init(struct rcar_du_group *rgrp);
 int rcar_du_planes_register(struct rcar_du_group *rgrp);
