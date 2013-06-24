@@ -48,6 +48,7 @@ struct drm_object_properties;
 #define DRM_MODE_OBJECT_FB 0xfbfbfbfb
 #define DRM_MODE_OBJECT_BLOB 0xbbbbbbbb
 #define DRM_MODE_OBJECT_PLANE 0xeeeeeeee
+#define DRM_MODE_OBJECT_LIVE_SOURCE 0xe1e1e1e1
 
 struct drm_mode_object {
 	uint32_t id;
@@ -304,6 +305,7 @@ struct drm_connector;
 struct drm_encoder;
 struct drm_pending_vblank_event;
 struct drm_plane;
+struct drm_live_source;
 
 /**
  * drm_crtc_funcs - control CRTCs for a given device
@@ -687,6 +689,30 @@ struct drm_plane {
 	struct drm_object_properties properties;
 };
 
+struct drm_live_source_funcs {
+	void (*destroy)(struct drm_live_source *src);
+};
+
+struct drm_live_source {
+	struct drm_device *dev;
+	struct list_head head;
+
+	struct drm_mode_object base;
+
+	char name[DRM_SOURCE_NAME_LEN];
+
+	uint32_t possible_planes;
+	uint32_t *format_types;
+	uint32_t format_count;
+
+	struct drm_plane *plane;
+	unsigned int width;
+	unsigned int height;
+	uint32_t pixel_format;
+
+	const struct drm_live_source_funcs *funcs;
+};
+
 /**
  * drm_mode_set - new values for a CRTC config change
  * @head: list management
@@ -802,6 +828,8 @@ struct drm_mode_config {
 	struct list_head encoder_list;
 	int num_plane;
 	struct list_head plane_list;
+	int num_live_source;
+	struct list_head live_source_list;
 
 	int num_crtc;
 	struct list_head crtc_list;
@@ -859,6 +887,7 @@ struct drm_mode_config {
 #define obj_to_property(x) container_of(x, struct drm_property, base)
 #define obj_to_blob(x) container_of(x, struct drm_property_blob, base)
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
+#define obj_to_live_source(x) container_of(x, struct drm_live_source, base)
 
 struct drm_prop_enum_list {
 	int type;
@@ -896,6 +925,13 @@ extern int drm_plane_init(struct drm_device *dev,
 extern void drm_plane_cleanup(struct drm_plane *plane);
 
 extern void drm_encoder_cleanup(struct drm_encoder *encoder);
+
+extern int drm_live_source_init(struct drm_device *dev,
+				struct drm_live_source *src, const char *name,
+				unsigned long possible_planes,
+				const uint32_t *formats, uint32_t format_count,
+				const struct drm_live_source_funcs *funcs);
+extern void drm_live_source_cleanup(struct drm_live_source *src);
 
 extern char *drm_get_connector_name(struct drm_connector *connector);
 extern char *drm_get_dpms_name(int val);
@@ -1010,6 +1046,8 @@ extern int drm_mode_getresources(struct drm_device *dev,
 				 void *data, struct drm_file *file_priv);
 extern int drm_mode_getplane_res(struct drm_device *dev, void *data,
 				   struct drm_file *file_priv);
+extern int drm_mode_getsource_res(struct drm_device *dev, void *data,
+				  struct drm_file *file_priv);
 extern int drm_mode_getcrtc(struct drm_device *dev,
 			    void *data, struct drm_file *file_priv);
 extern int drm_mode_getconnector(struct drm_device *dev,
@@ -1021,6 +1059,10 @@ extern int drm_mode_getplane(struct drm_device *dev,
 			       void *data, struct drm_file *file_priv);
 extern int drm_mode_setplane(struct drm_device *dev,
 			       void *data, struct drm_file *file_priv);
+extern int drm_mode_getsource(struct drm_device *dev,
+			      void *data, struct drm_file *file_priv);
+extern int drm_mode_setsource(struct drm_device *dev,
+			      void *data, struct drm_file *file_priv);
 extern int drm_mode_cursor_ioctl(struct drm_device *dev,
 				void *data, struct drm_file *file_priv);
 extern int drm_mode_addfb(struct drm_device *dev,
