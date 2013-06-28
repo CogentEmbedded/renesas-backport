@@ -189,6 +189,7 @@ enum {
 	MSTP315, MSTP314, MSTP313, MSTP312, MSTP311, MSTP305, MSTP304,
 	MSTP216, MSTP207, MSTP206, MSTP204, MSTP203, MSTP202,
 	MSTP131, MSTP130, MSTP128, MSTP127,
+	MSTP124,
 	MSTP_NR
 };
 
@@ -220,6 +221,7 @@ static struct clk mstp_clks[MSTP_NR] = {
 	[MSTP130] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 30, MSTPSR1, 0), /* VSP1 (RT) */
 	[MSTP128] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 28, MSTPSR1, 0), /* VSP1 (DU0) */
 	[MSTP127] = SH_CLK_MSTP32_STS(&zg_clk, SMSTPCR1, 27, MSTPSR1, 0), /* VSP1 (DU1) */
+	[MSTP124] = SH_CLK_MSTP32(&rclk_clk, SMSTPCR1, 24, 0), /* CMT0 */
 };
 
 static struct clk_lookup lookups[] = {
@@ -291,6 +293,7 @@ static struct clk_lookup lookups[] = {
 	CLKDEV_DEV_ID("vsp1.1", &mstp_clks[MSTP130]),
 	CLKDEV_DEV_ID("vsp1.2", &mstp_clks[MSTP128]),
 	CLKDEV_DEV_ID("vsp1.3", &mstp_clks[MSTP127]),
+	CLKDEV_DEV_ID("sh_cmt.0", &mstp_clks[MSTP124]),
 };
 
 #define R8A7790_CLOCK_ROOT(e, m, p0, p1, p30, p31)		\
