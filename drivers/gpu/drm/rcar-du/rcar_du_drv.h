@@ -28,7 +28,6 @@ struct rcar_du_device;
 
 #define RCAR_DU_FEATURE_CRTC_IRQ_CLOCK	(1 << 0)	/* Per-CRTC IRQ and clock */
 #define RCAR_DU_FEATURE_ALIGN_128B	(1 << 1)	/* Align pitches to 128 bytes */
-#define RCAR_DU_FEATURE_DEFR8		(1 << 2)
 
 /*
  * struct rcar_du_device_info - DU model-specific information
