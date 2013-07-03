@@ -308,7 +308,6 @@
 #define PnTC1R			0x00144
 #define PnTC2R			0x00148
 #define PnTC3R			0x0014c
-#define PnTC3R_CODE		(0x66 << 24)
 
 #define PnMLR			0x00150
 
