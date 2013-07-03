@@ -434,7 +434,7 @@ static const uint32_t formats[] = {
 	DRM_FORMAT_NV16,
 };
 
-int rcar_du_planes_init(struct rcar_du_device *rcdu)
+int rcar_du_plane_init(struct rcar_du_device *rcdu)
 {
 	unsigned int i;
 
@@ -474,7 +474,7 @@ int rcar_du_planes_init(struct rcar_du_device *rcdu)
 	return 0;
 }
 
-int rcar_du_planes_register(struct rcar_du_device *rcdu)
+int rcar_du_plane_register(struct rcar_du_device *rcdu)
 {
 	unsigned int i;
 	int ret;
