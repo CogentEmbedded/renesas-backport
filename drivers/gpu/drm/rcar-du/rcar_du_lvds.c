@@ -166,15 +166,9 @@ static bool rcar_du_lvds_encoder_mode_fixup(struct drm_encoder *encoder,
 		return false;
 	}
 
+	/* The flat panel mode is fixed, just copy it to the adjusted mode. */
 	panel_mode = list_first_entry(&connector->modes,
 				      struct drm_display_mode, head);
-
-	/* We're not allowed to modify the resolution. */
-	if (mode->hdisplay != panel_mode->hdisplay ||
-	    mode->vdisplay != panel_mode->vdisplay)
-		return false;
-
-	/* The flat panel mode is fixed, just copy it to the adjusted mode. */
 	drm_mode_copy(adjusted_mode, panel_mode);
 
 	return true;
