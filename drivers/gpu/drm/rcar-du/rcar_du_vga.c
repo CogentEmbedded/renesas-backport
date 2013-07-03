@@ -158,8 +158,13 @@ static const struct drm_encoder_helper_funcs encoder_helper_funcs = {
 	.mode_set = rcar_du_vga_encoder_mode_set,
 };
 
+static void rcar_du_vga_encoder_destroy(struct drm_encoder *encoder)
+{
+	drm_encoder_cleanup(encoder);
+}
+
 static const struct drm_encoder_funcs encoder_funcs = {
-	.destroy = drm_encoder_cleanup,
+	.destroy = rcar_du_vga_encoder_destroy,
 };
 
 int rcar_du_vga_init(struct rcar_du_device *rcdu,
