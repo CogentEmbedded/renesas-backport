@@ -20,9 +20,7 @@
 #include "rcar_du_crtc.h"
 #include "rcar_du_drv.h"
 #include "rcar_du_kms.h"
-#include "rcar_du_lvds.h"
 #include "rcar_du_regs.h"
-#include "rcar_du_vga.h"
 
 /* -----------------------------------------------------------------------------
  * Format helpers
@@ -139,7 +137,6 @@ static const struct drm_mode_config_funcs rcar_du_mode_config_funcs = {
 
 int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 {
-	const struct rcar_du_encoder_data *pdata;
 	unsigned int i;
 	int ret;
 
@@ -155,29 +152,8 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 	if (ret < 0)
 		return ret;
 
-	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i) {
+	for (i = 0; i < ARRAY_SIZE(rcdu->crtc); ++i)
 		rcar_du_crtc_create(rcdu, i);
-
-		pdata = &rcdu->pdata->encoders[i];
-		if (pdata->encoder == RCAR_DU_ENCODER_UNUSED)
-			continue;
-
-		switch (pdata->encoder) {
-		case RCAR_DU_ENCODER_VGA:
-			rcar_du_vga_init(rcdu, &pdata->vga, i);
-			break;
-
-		case RCAR_DU_ENCODER_LVDS:
-			rcar_du_lvds_init(rcdu, &pdata->lvds, i);
-			break;
-
-		default:
-			break;
-		}
-	}
-
-	rcdu->used_crtcs = 0;
-	rcdu->num_crtcs = i;
 
 	ret = rcar_du_plane_register(rcdu);
 	if (ret < 0)

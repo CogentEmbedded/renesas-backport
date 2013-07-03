@@ -19,16 +19,6 @@ struct drm_framebuffer;
 struct rcar_du_device;
 struct rcar_du_format_info;
 
-/* The RCAR DU has 8 hardware planes, shared between KMS planes and CRTCs. As
- * using KMS planes requires at least one of the CRTCs being enabled, no more
- * than 7 KMS planes can be available. We thus create 7 KMS planes and
- * 9 software planes (one for each KMS planes and one for each CRTC).
- */
-
-#define RCAR_DU_NUM_KMS_PLANES		7
-#define RCAR_DU_NUM_HW_PLANES		8
-#define RCAR_DU_NUM_SW_PLANES		9
-
 struct rcar_du_plane {
 	struct rcar_du_device *dev;
 	struct drm_crtc *crtc;

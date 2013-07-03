@@ -107,7 +107,7 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 	}
 
 	/* IRQ and vblank handling */
-	ret = drm_vblank_init(dev, (1 << rcdu->num_crtcs) - 1);
+	ret = drm_vblank_init(dev, 1);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to initialize vblank\n");
 		goto done;
@@ -133,8 +133,8 @@ static void rcar_du_preclose(struct drm_device *dev, struct drm_file *file)
 	struct rcar_du_device *rcdu = dev->dev_private;
 	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i)
-		rcar_du_crtc_cancel_page_flip(&rcdu->crtcs[i], file);
+	for (i = 0; i < ARRAY_SIZE(rcdu->crtc); ++i)
+		rcar_du_crtc_cancel_page_flip(&rcdu->crtc[i], file);
 }
 
 static irqreturn_t rcar_du_irq(int irq, void *arg)
@@ -143,8 +143,8 @@ static irqreturn_t rcar_du_irq(int irq, void *arg)
 	struct rcar_du_device *rcdu = dev->dev_private;
 	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i)
-		rcar_du_crtc_irq(&rcdu->crtcs[i]);
+	for (i = 0; i < ARRAY_SIZE(rcdu->crtc); ++i)
+		rcar_du_crtc_irq(&rcdu->crtc[i]);
 
 	return IRQ_HANDLED;
 }
@@ -153,7 +153,7 @@ static int rcar_du_enable_vblank(struct drm_device *dev, int crtc)
 {
 	struct rcar_du_device *rcdu = dev->dev_private;
 
-	rcar_du_crtc_enable_vblank(&rcdu->crtcs[crtc], true);
+	rcar_du_crtc_enable_vblank(&rcdu->crtc[crtc], true);
 
 	return 0;
 }
@@ -162,7 +162,7 @@ static void rcar_du_disable_vblank(struct drm_device *dev, int crtc)
 {
 	struct rcar_du_device *rcdu = dev->dev_private;
 
-	rcar_du_crtc_enable_vblank(&rcdu->crtcs[crtc], false);
+	rcar_du_crtc_enable_vblank(&rcdu->crtc[crtc], false);
 }
 
 static const struct file_operations rcar_du_fops = {

@@ -414,7 +414,9 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 		return -ENOMEM;
 
 	rcdu->planes.zpos =
-		drm_property_create_range(rcdu->ddev, 0, "zpos", 1, 7);
+		drm_property_create_range(rcdu->ddev, 0, "zpos",
+					  ARRAY_SIZE(rcdu->crtc),
+					  ARRAY_SIZE(rcdu->planes.planes) - 1);
 	if (rcdu->planes.zpos == NULL)
 		return -ENOMEM;
 
@@ -435,18 +437,20 @@ int rcar_du_plane_register(struct rcar_du_device *rcdu)
 	unsigned int i;
 	int ret;
 
-	for (i = 0; i < RCAR_DU_NUM_KMS_PLANES; ++i) {
+	/* As at least one hardware plane will always be used by one of the
+	 * CRTCs only register N-1 KMS planes.
+	 */
+	for (i = 0; i < ARRAY_SIZE(rcdu->planes.planes) - 1; ++i) {
 		struct rcar_du_kms_plane *plane;
 
 		plane = devm_kzalloc(rcdu->dev, sizeof(*plane), GFP_KERNEL);
 		if (plane == NULL)
 			return -ENOMEM;
 
-		plane->hwplane = &rcdu->planes.planes[i + 2];
+		plane->hwplane = &rcdu->planes.planes[i + 1];
 		plane->hwplane->zpos = 1;
 
-		ret = drm_plane_init(rcdu->ddev, &plane->plane,
-				     (1 << rcdu->num_crtcs) - 1,
+		ret = drm_plane_init(rcdu->ddev, &plane->plane, 1,
 				     &rcar_du_plane_funcs, formats,
 				     ARRAY_SIZE(formats), false);
 		if (ret < 0)
