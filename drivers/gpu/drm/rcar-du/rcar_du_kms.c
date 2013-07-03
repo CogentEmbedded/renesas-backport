@@ -206,7 +206,7 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 		if (pdata->type == RCAR_DU_ENCODER_UNUSED)
 			continue;
 
-		if (pdata->output >= rcdu->num_crtcs) {
+		if (pdata->output >= ARRAY_SIZE(rcdu->crtcs)) {
 			dev_warn(rcdu->dev,
 				 "encoder %u references unexisting output %u, skipping\n",
 				 i, pdata->output);
