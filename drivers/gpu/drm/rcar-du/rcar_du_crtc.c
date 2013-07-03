@@ -129,16 +129,14 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 	rcar_du_crtc_write(rcrtc, DEWR,  mode->hdisplay);
 }
 
-void rcar_du_crtc_route_output(struct drm_crtc *crtc,
-			       enum rcar_du_output output)
+void rcar_du_crtc_route_output(struct drm_crtc *crtc, unsigned int output)
 {
 	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
-	struct rcar_du_device *rcdu = rcrtc->group->dev;
 
 	/* Store the route from the CRTC output to the DU output. The DU will be
 	 * configured when starting the CRTC.
 	 */
-	rcrtc->outputs |= BIT(output);
+	rcrtc->outputs |= 1 << output;
 }
 
 void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
