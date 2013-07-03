@@ -74,9 +74,8 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 	div = DIV_ROUND_CLOSEST(clk, mode->clock * 1000);
 	div = clamp(div, 1U, 64U) - 1;
 
-	rcar_du_write(rcdu, rcrtc->index ? ESCR2 : ESCR,
-		      ESCR_DCLKSEL_CLKS | div);
-	rcar_du_write(rcdu, rcrtc->index ? OTAR2 : OTAR, 0);
+	rcar_du_crtc_write(rcrtc, ESCR, ESCR_DCLKSEL_CLKS | div);
+	rcar_du_crtc_write(rcrtc, OTAR, 0);
 
 	/* Signal polarities */
 	value = ((mode->flags & DRM_MODE_FLAG_PVSYNC) ? 0 : DSMR_VSL)
@@ -178,10 +177,10 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	clk_enable(rcdu->clock);
 
 	/* Enable extended features */
-	rcar_du_write(rcdu, DEFR, DEFR_CODE | DEFR_DEFE);
-	rcar_du_write(rcdu, DEFR2, DEFR2_CODE | DEFR2_DEFE2G);
-	rcar_du_write(rcdu, DEFR3, DEFR3_CODE | DEFR3_DEFE3);
-	rcar_du_write(rcdu, DEFR4, DEFR4_CODE);
+	rcar_du_crtc_write(rcrtc, DEFR, DEFR_CODE | DEFR_DEFE);
+	rcar_du_crtc_write(rcrtc, DEFR2, DEFR2_CODE | DEFR2_DEFE2G);
+	rcar_du_crtc_write(rcrtc, DEFR3, DEFR3_CODE | DEFR3_DEFE3);
+	rcar_du_crtc_write(rcrtc, DEFR4, DEFR4_CODE);
 
 	/* Set display off and background to black */
 	rcar_du_crtc_write(rcrtc, DOOR, DOOR_RGB(0, 0, 0));
