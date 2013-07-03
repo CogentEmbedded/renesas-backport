@@ -21,7 +21,6 @@
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_gem_cma_helper.h>
 
 #include "rcar_du_crtc.h"
@@ -92,11 +91,6 @@ void rcar_du_put(struct rcar_du_device *rcdu)
 
 static int rcar_du_unload(struct drm_device *dev)
 {
-	struct rcar_du_device *rcdu = dev->dev_private;
-
-	if (rcdu->fbdev)
-		drm_fbdev_cma_fini(rcdu->fbdev);
-
 	drm_kms_helper_poll_fini(dev);
 	drm_mode_config_cleanup(dev);
 	drm_vblank_cleanup(dev);
@@ -201,13 +195,6 @@ static void rcar_du_preclose(struct drm_device *dev, struct drm_file *file)
 		rcar_du_crtc_cancel_page_flip(&rcdu->crtcs[i], file);
 }
 
-static void rcar_du_lastclose(struct drm_device *dev)
-{
-	struct rcar_du_device *rcdu = dev->dev_private;
-
-	drm_fbdev_cma_restore_mode(rcdu->fbdev);
-}
-
 static irqreturn_t rcar_du_irq(int irq, void *arg)
 {
 	struct drm_device *dev = arg;
@@ -257,7 +244,6 @@ static struct drm_driver rcar_du_driver = {
 	.load			= rcar_du_load,
 	.unload			= rcar_du_unload,
 	.preclose		= rcar_du_preclose,
-	.lastclose		= rcar_du_lastclose,
 	.irq_handler		= rcar_du_irq,
 	.get_vblank_counter	= drm_vblank_count,
 	.enable_vblank		= rcar_du_enable_vblank,

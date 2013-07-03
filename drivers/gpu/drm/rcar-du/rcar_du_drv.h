@@ -24,7 +24,6 @@
 struct clk;
 struct device;
 struct drm_device;
-struct drm_fbdev_cma;
 
 struct rcar_du_device {
 	struct device *dev;
@@ -35,7 +34,6 @@ struct rcar_du_device {
 	unsigned int use_count;
 
 	struct drm_device *ddev;
-	struct drm_fbdev_cma *fbdev;
 
 	struct rcar_du_crtc crtcs[2];
 	unsigned int used_crtcs;
