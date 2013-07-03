@@ -26,16 +26,6 @@
 #define RCAR_DU_COLORKEY_SOURCE		(1 << 24)
 #define RCAR_DU_COLORKEY_MASK		(1 << 24)
 
-struct rcar_du_kms_plane {
-	struct drm_plane plane;
-	struct rcar_du_plane *hwplane;
-};
-
-static inline struct rcar_du_plane *to_rcar_plane(struct drm_plane *plane)
-{
-	return container_of(plane, struct rcar_du_kms_plane, plane)->hwplane;
-}
-
 static u32 rcar_du_plane_read(struct rcar_du_device *rcdu,
 			      unsigned int index, u32 reg)
 {
@@ -399,6 +389,7 @@ static const uint32_t formats[] = {
 int rcar_du_plane_init(struct rcar_du_device *rcdu)
 {
 	unsigned int i;
+	int ret;
 
 	mutex_init(&rcdu->planes.lock);
 	rcdu->planes.free = 0xff;
@@ -426,29 +417,13 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 		plane->dev = rcdu;
 		plane->hwindex = -1;
 		plane->colorkey = RCAR_DU_COLORKEY_NONE;
-		plane->zpos = 0;
-	}
+		plane->zpos = 1;
 
-	return 0;
-}
-
-int rcar_du_plane_register(struct rcar_du_device *rcdu)
-{
-	unsigned int i;
-	int ret;
-
-	/* As at least one hardware plane will always be used by one of the
-	 * CRTCs only register N-1 KMS planes.
-	 */
-	for (i = 0; i < ARRAY_SIZE(rcdu->planes.planes) - 1; ++i) {
-		struct rcar_du_kms_plane *plane;
-
-		plane = devm_kzalloc(rcdu->dev, sizeof(*plane), GFP_KERNEL);
-		if (plane == NULL)
-			return -ENOMEM;
-
-		plane->hwplane = &rcdu->planes.planes[i + 1];
-		plane->hwplane->zpos = 1;
+		/* Reserve one plane per CRTC */
+		if (i < ARRAY_SIZE(rcdu->crtc)) {
+			plane->zpos = 0;
+			continue;
+		}
 
 		ret = drm_plane_init(rcdu->ddev, &plane->plane, 1,
 				     &rcar_du_plane_funcs, formats,

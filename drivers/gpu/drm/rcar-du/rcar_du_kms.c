@@ -155,10 +155,6 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 	for (i = 0; i < ARRAY_SIZE(rcdu->crtc); ++i)
 		rcar_du_crtc_create(rcdu, i);
 
-	ret = rcar_du_plane_register(rcdu);
-	if (ret < 0)
-		return ret;
-
 	drm_kms_helper_poll_init(rcdu->ddev);
 
 	drm_helper_disable_unused_functions(rcdu->ddev);
