@@ -7,6 +7,4 @@ rcar-du-drm-y := rcar_du_crtc.o \
 		 rcar_du_plane.o \
 		 rcar_du_vgacon.o
 
-rcar-du-drm-$(CONFIG_DRM_RCAR_LVDS)	+= rcar_du_lvdsenc.o
-
-obj-$(CONFIG_DRM_RCAR_DU)		+= rcar-du-drm.o
+obj-$(CONFIG_DRM_RCAR_DU)	+= rcar-du-drm.o
