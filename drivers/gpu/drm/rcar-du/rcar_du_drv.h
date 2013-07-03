@@ -15,6 +15,7 @@
 #define __RCAR_DU_DRV_H__
 
 #include <linux/kernel.h>
+#include <linux/mutex.h>
 #include <linux/platform_data/rcar-du.h>
 
 #include "rcar_du_crtc.h"
@@ -50,7 +51,15 @@ struct rcar_du_device {
 	unsigned int used_crtcs;
 	unsigned int num_crtcs;
 
-	struct rcar_du_planes planes;
+	struct {
+		struct rcar_du_plane planes[RCAR_DU_NUM_SW_PLANES];
+		unsigned int free;
+		struct mutex lock;
+
+		struct drm_property *alpha;
+		struct drm_property *colorkey;
+		struct drm_property *zpos;
+	} planes;
 };
 
 static inline bool rcar_du_has(struct rcar_du_device *rcdu,
