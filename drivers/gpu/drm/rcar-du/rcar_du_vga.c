@@ -19,9 +19,21 @@
 #include "rcar_du_kms.h"
 #include "rcar_du_vga.h"
 
+struct rcar_du_vga_encoder {
+	struct drm_encoder encoder;
+};
+
+struct rcar_du_vga_connector {
+	struct drm_connector connector;
+	struct drm_encoder *encoder;
+};
+
 /* -----------------------------------------------------------------------------
  * Connector
  */
+
+#define to_rcar_vga_connector(c) \
+	container_of(c, struct rcar_du_vga_connector, connector)
 
 static int rcar_du_vga_connector_get_modes(struct drm_connector *connector)
 {
@@ -34,10 +46,18 @@ static int rcar_du_vga_connector_mode_valid(struct drm_connector *connector,
 	return MODE_OK;
 }
 
+static struct drm_encoder *
+rcar_du_vga_connector_best_encoder(struct drm_connector *connector)
+{
+	struct rcar_du_vga_connector *vgacon = to_rcar_vga_connector(connector);
+
+	return vgacon->encoder;
+}
+
 static const struct drm_connector_helper_funcs connector_helper_funcs = {
 	.get_modes = rcar_du_vga_connector_get_modes,
 	.mode_valid = rcar_du_vga_connector_mode_valid,
-	.best_encoder = rcar_du_connector_best_encoder,
+	.best_encoder = rcar_du_vga_connector_best_encoder,
 };
 
 static void rcar_du_vga_connector_destroy(struct drm_connector *connector)
@@ -60,17 +80,17 @@ static const struct drm_connector_funcs connector_funcs = {
 };
 
 static int rcar_du_vga_connector_init(struct rcar_du_device *rcdu,
-				      struct rcar_du_encoder *renc)
+				      struct drm_encoder *encoder)
 {
-	struct rcar_du_connector *rcon;
+	struct rcar_du_vga_connector *vgacon;
 	struct drm_connector *connector;
 	int ret;
 
-	rcon = devm_kzalloc(rcdu->dev, sizeof(*rcon), GFP_KERNEL);
-	if (rcon == NULL)
+	vgacon = devm_kzalloc(rcdu->dev, sizeof(*vgacon), GFP_KERNEL);
+	if (vgacon == NULL)
 		return -ENOMEM;
 
-	connector = &rcon->connector;
+	connector = &vgacon->connector;
 	connector->display_info.width_mm = 0;
 	connector->display_info.height_mm = 0;
 
@@ -88,12 +108,12 @@ static int rcar_du_vga_connector_init(struct rcar_du_device *rcdu,
 	drm_object_property_set_value(&connector->base,
 		rcdu->ddev->mode_config.dpms_property, DRM_MODE_DPMS_OFF);
 
-	ret = drm_mode_connector_attach_encoder(connector, &renc->encoder);
+	ret = drm_mode_connector_attach_encoder(connector, encoder);
 	if (ret < 0)
 		return ret;
 
-	connector->encoder = &renc->encoder;
-	rcon->encoder = renc;
+	connector->encoder = encoder;
+	vgacon->encoder = encoder;
 
 	return 0;
 }
@@ -101,6 +121,9 @@ static int rcar_du_vga_connector_init(struct rcar_du_device *rcdu,
 /* -----------------------------------------------------------------------------
  * Encoder
  */
+
+#define to_rcar_vga_encoder(e) \
+	container_of(e, struct rcar_du_vga_encoder, encoder)
 
 static void rcar_du_vga_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
@@ -113,12 +136,26 @@ static bool rcar_du_vga_encoder_mode_fixup(struct drm_encoder *encoder,
 	return true;
 }
 
+static void rcar_du_vga_encoder_mode_prepare(struct drm_encoder *encoder)
+{
+}
+
+static void rcar_du_vga_encoder_mode_set(struct drm_encoder *encoder,
+					 struct drm_display_mode *mode,
+					 struct drm_display_mode *adjusted_mode)
+{
+}
+
+static void rcar_du_vga_encoder_mode_commit(struct drm_encoder *encoder)
+{
+}
+
 static const struct drm_encoder_helper_funcs encoder_helper_funcs = {
 	.dpms = rcar_du_vga_encoder_dpms,
 	.mode_fixup = rcar_du_vga_encoder_mode_fixup,
-	.prepare = rcar_du_encoder_mode_prepare,
-	.commit = rcar_du_encoder_mode_commit,
-	.mode_set = rcar_du_encoder_mode_set,
+	.prepare = rcar_du_vga_encoder_mode_prepare,
+	.commit = rcar_du_vga_encoder_mode_commit,
+	.mode_set = rcar_du_vga_encoder_mode_set,
 };
 
 static const struct drm_encoder_funcs encoder_funcs = {
@@ -129,15 +166,15 @@ int rcar_du_vga_init(struct rcar_du_device *rcdu,
 		     const struct rcar_du_encoder_vga_data *data,
 		     unsigned int crtc)
 {
-	struct rcar_du_encoder *renc;
+	struct rcar_du_vga_encoder *vgaenc;
 	struct drm_encoder *encoder;
 	int ret;
 
-	renc = devm_kzalloc(rcdu->dev, sizeof(*renc), GFP_KERNEL);
-	if (renc == NULL)
+	vgaenc = devm_kzalloc(rcdu->dev, sizeof(*vgaenc), GFP_KERNEL);
+	if (vgaenc == NULL)
 		return -ENOMEM;
 
-	encoder = &renc->encoder;
+	encoder = &vgaenc->encoder;
 	encoder->possible_crtcs = 1 << crtc;
 
 	ret = drm_encoder_init(rcdu->ddev, encoder, &encoder_funcs,
@@ -147,5 +184,5 @@ int rcar_du_vga_init(struct rcar_du_device *rcdu,
 
 	drm_encoder_helper_add(encoder, &encoder_helper_funcs);
 
-	return rcar_du_vga_connector_init(rcdu, renc);
+	return rcar_du_vga_connector_init(rcdu, encoder);
 }

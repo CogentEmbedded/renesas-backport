@@ -100,32 +100,6 @@ const struct rcar_du_format_info *rcar_du_format_info(u32 fourcc)
 }
 
 /* -----------------------------------------------------------------------------
- * Common connector and encoder functions
- */
-
-struct drm_encoder *
-rcar_du_connector_best_encoder(struct drm_connector *connector)
-{
-	struct rcar_du_connector *rcon = to_rcar_connector(connector);
-
-	return &rcon->encoder->encoder;
-}
-
-void rcar_du_encoder_mode_prepare(struct drm_encoder *encoder)
-{
-}
-
-void rcar_du_encoder_mode_set(struct drm_encoder *encoder,
-			      struct drm_display_mode *mode,
-			      struct drm_display_mode *adjusted_mode)
-{
-}
-
-void rcar_du_encoder_mode_commit(struct drm_encoder *encoder)
-{
-}
-
-/* -----------------------------------------------------------------------------
  * Frame buffer
  */
 
