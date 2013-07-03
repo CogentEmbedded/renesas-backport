@@ -113,6 +113,7 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 	struct platform_device *pdev = dev->platformdev;
 	struct rcar_du_platform_data *pdata = pdev->dev.platform_data;
 	struct rcar_du_device *rcdu;
+	struct resource *ioarea;
 	struct resource *mem;
 	int ret;
 
@@ -139,7 +140,15 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 		return -EINVAL;
 	}
 
-	rcdu->mmio = devm_ioremap_resource(&pdev->dev, mem);
+	ioarea = devm_request_mem_region(&pdev->dev, mem->start,
+					 resource_size(mem), pdev->name);
+	if (ioarea == NULL) {
+		dev_err(&pdev->dev, "failed to request memory region\n");
+		return -EBUSY;
+	}
+
+	rcdu->mmio = devm_ioremap_nocache(&pdev->dev, ioarea->start,
+					  resource_size(ioarea));
 	if (rcdu->mmio == NULL) {
 		dev_err(&pdev->dev, "failed to remap memory resource\n");
 		return -ENOMEM;
