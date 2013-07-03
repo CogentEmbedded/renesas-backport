@@ -412,8 +412,8 @@ static int rcar_du_crtc_mode_set(struct drm_crtc *crtc,
 
 	rcrtc->plane->src_x = x;
 	rcrtc->plane->src_y = y;
-	rcrtc->plane->width = mode->hdisplay;
-	rcrtc->plane->height = mode->vdisplay;
+	rcrtc->plane->width = crtc->fb->width;
+	rcrtc->plane->height = crtc->fb->height;
 
 	rcar_du_plane_compute_base(rcrtc->plane, crtc->fb);
 
