@@ -245,24 +245,15 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	rcar_du_plane_compute_base(rplane, fb);
 	rcar_du_plane_setup(rplane);
 
-	mutex_lock(&rcdu->planes.lock);
-	rplane->enabled = true;
-	rcar_du_crtc_update_planes(rplane->crtc);
-	mutex_unlock(&rcdu->planes.lock);
-
+	rcar_du_crtc_enable_plane(rplane, true);
 	return 0;
 }
 
 static int rcar_du_plane_disable(struct drm_plane *plane)
 {
-	struct rcar_du_device *rcdu = plane->dev->dev_private;
 	struct rcar_du_plane *rplane = to_rcar_plane(plane);
 
-	mutex_lock(&rcdu->planes.lock);
-	rplane->enabled = false;
-	rcar_du_crtc_update_planes(rplane->crtc);
-	mutex_unlock(&rcdu->planes.lock);
-
+	rcar_du_crtc_enable_plane(rplane, false);
 	rcar_du_plane_release(rplane);
 
 	rplane->crtc = NULL;
@@ -271,35 +262,9 @@ static int rcar_du_plane_disable(struct drm_plane *plane)
 	return 0;
 }
 
-static int rcar_du_plane_set_property(struct drm_plane *plane,
-				      struct drm_property *property,
-				      uint64_t value)
-{
-	struct rcar_du_device *rcdu = plane->dev->dev_private;
-	struct rcar_du_plane *rplane = to_rcar_plane(plane);
-
-	if (property != rcdu->planes.zpos)
-		return -EINVAL;
-
-	mutex_lock(&rcdu->planes.lock);
-	if (rplane->zpos == value)
-		goto done;
-
-	rplane->zpos = value;
-	if (!rplane->enabled)
-		goto done;
-
-	rcar_du_crtc_update_planes(rplane->crtc);
-
-done:
-	mutex_unlock(&rcdu->planes.lock);
-	return 0;
-}
-
 static const struct drm_plane_funcs rcar_du_plane_funcs = {
 	.update_plane = rcar_du_plane_update,
 	.disable_plane = rcar_du_plane_disable,
-	.set_property = rcar_du_plane_set_property,
 	.destroy = drm_plane_cleanup,
 };
 
@@ -323,35 +288,21 @@ int rcar_du_plane_init(struct rcar_du_device *rcdu)
 	mutex_init(&rcdu->planes.lock);
 	rcdu->planes.free = 0xff;
 
-	rcdu->planes.zpos =
-		drm_property_create_range(rcdu->ddev, 0, "zpos",
-					  ARRAY_SIZE(rcdu->crtc),
-					  ARRAY_SIZE(rcdu->planes.planes) - 1);
-	if (rcdu->planes.zpos == NULL)
-		return -ENOMEM;
-
 	for (i = 0; i < ARRAY_SIZE(rcdu->planes.planes); ++i) {
 		struct rcar_du_plane *plane = &rcdu->planes.planes[i];
 
 		plane->dev = rcdu;
 		plane->hwindex = -1;
-		plane->zpos = 1;
 
 		/* Reserve one plane per CRTC */
-		if (i < ARRAY_SIZE(rcdu->crtc)) {
-			plane->zpos = 0;
+		if (i < ARRAY_SIZE(rcdu->crtc))
 			continue;
-		}
 
 		ret = drm_plane_init(rcdu->ddev, &plane->plane, 1,
 				     &rcar_du_plane_funcs, formats,
 				     ARRAY_SIZE(formats), false);
 		if (ret < 0)
 			return ret;
-
-		drm_object_attach_property(&plane->plane.base,
-					   rcdu->planes.zpos, 1);
-
 	}
 
 	return 0;

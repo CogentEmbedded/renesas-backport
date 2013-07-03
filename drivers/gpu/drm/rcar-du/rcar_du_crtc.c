@@ -111,47 +111,36 @@ static void rcar_du_crtc_start_stop(struct rcar_du_crtc *rcrtc, bool start)
 		rcar_du_crtc_write(rcrtc, DSYSR, value | DSYSR_DRES);
 }
 
-void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
+void rcar_du_crtc_enable_plane(struct rcar_du_plane *rplane, bool enable)
 {
-	struct rcar_du_device *rcdu = crtc->dev->dev_private;
-	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
-	struct rcar_du_plane *planes[ARRAY_SIZE(rcdu->planes.planes)];
-	unsigned int num_planes = 0;
-	unsigned int prio = 0;
+	struct rcar_du_crtc *rcrtc = to_rcar_crtc(rplane->crtc);
+	struct rcar_du_device *rcdu = rplane->crtc->dev->dev_private;
+	unsigned int prio;
 	unsigned int i;
 	u32 dspr = 0;
 
-	for (i = 0; i < ARRAY_SIZE(rcdu->planes.planes); ++i) {
+	mutex_lock(&rcdu->planes.lock);
+
+	rplane->enabled = enable;
+
+	for (i = 0, prio = 28; i < ARRAY_SIZE(rcdu->planes.planes); ++i) {
 		struct rcar_du_plane *plane = &rcdu->planes.planes[i];
-		unsigned int j;
 
 		if (plane->crtc != &rcrtc->crtc || !plane->enabled)
 			continue;
 
-		/* Insert the plane in the sorted planes array. */
-		for (j = num_planes++; j > 0; --j) {
-			if (planes[j-1]->zpos <= plane->zpos)
-				break;
-			planes[j] = planes[j-1];
-		}
-
-		planes[j] = plane;
-		prio += plane->format->planes * 4;
-	}
-
-	for (i = 0; i < num_planes; ++i) {
-		struct rcar_du_plane *plane = planes[i];
-
-		prio -= 4;
 		dspr |= (plane->hwindex + 1) << prio;
+		prio -= 4;
 
 		if (plane->format->planes == 2) {
-			prio -= 4;
 			dspr |= (plane->hwindex + 2) << prio;
+			prio -= 4;
 		}
 	}
 
 	rcar_du_crtc_write(rcrtc, DS1PR, dspr);
+
+	mutex_unlock(&rcdu->planes.lock);
 }
 
 /*
@@ -191,11 +180,7 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 
 	rcar_du_crtc_set_display_timing(rcrtc);
 	rcar_du_plane_setup(rcrtc->plane);
-
-	mutex_lock(&rcdu->planes.lock);
-	rcrtc->plane->enabled = true;
-	rcar_du_crtc_update_planes(crtc);
-	mutex_unlock(&rcdu->planes.lock);
+	rcar_du_crtc_enable_plane(rcrtc->plane, true);
 
 	/* Setup planes. */
 	list_for_each_entry(plane, &rcdu->ddev->mode_config.plane_list, head) {
@@ -220,11 +205,7 @@ static void rcar_du_crtc_stop(struct rcar_du_crtc *rcrtc)
 	if (!rcrtc->started)
 		return;
 
-	mutex_lock(&rcdu->planes.lock);
-	rcrtc->plane->enabled = false;
-	rcar_du_crtc_update_planes(crtc);
-	mutex_unlock(&rcdu->planes.lock);
-
+	rcar_du_crtc_enable_plane(rcrtc->plane, false);
 	rcar_du_crtc_start_stop(rcrtc, false);
 
 	clk_disable(rcdu->clock);
