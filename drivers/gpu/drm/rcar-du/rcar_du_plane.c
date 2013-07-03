@@ -38,8 +38,7 @@ static void rcar_du_plane_write(struct rcar_du_device *rcdu,
 	rcar_du_write(rcdu, index * PLANE_OFF + reg, data);
 }
 
-int rcar_du_plane_reserve(struct rcar_du_plane *plane,
-			  const struct rcar_du_format_info *format)
+int rcar_du_plane_reserve(struct rcar_du_plane *plane)
 {
 	struct rcar_du_device *rcdu = plane->dev;
 	unsigned int i;
@@ -51,7 +50,7 @@ int rcar_du_plane_reserve(struct rcar_du_plane *plane,
 		if (!(rcdu->planes.free & (1 << i)))
 			continue;
 
-		if (format->planes == 1 ||
+		if (plane->format->planes == 1 ||
 		    rcdu->planes.free & (1 << ((i + 1) % 8)))
 			break;
 	}
@@ -60,7 +59,7 @@ int rcar_du_plane_reserve(struct rcar_du_plane *plane,
 		goto done;
 
 	rcdu->planes.free &= ~(1 << i);
-	if (format->planes == 2)
+	if (plane->format->planes == 2)
 		rcdu->planes.free &= ~(1 << ((i + 1) % 8));
 
 	plane->hwindex = i;
@@ -264,16 +263,6 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 
 	nplanes = rplane->format ? rplane->format->planes : 0;
 
-	/* Reallocate hardware planes if the number of required planes has
-	 * changed.
-	 */
-	if (format->planes != nplanes) {
-		rcar_du_plane_release(rplane);
-		ret = rcar_du_plane_reserve(rplane, format);
-		if (ret < 0)
-			return ret;
-	}
-
 	rplane->crtc = crtc;
 	rplane->format = format;
 	rplane->pitch = fb->pitches[0];
@@ -284,6 +273,16 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	rplane->dst_y = crtc_y;
 	rplane->width = crtc_w;
 	rplane->height = crtc_h;
+
+	/* Reallocate hardware planes if the number of required planes has
+	 * changed.
+	 */
+	if (format->planes != nplanes) {
+		rcar_du_plane_release(rplane);
+		ret = rcar_du_plane_reserve(rplane);
+		if (ret < 0)
+			return ret;
+	}
 
 	rcar_du_plane_compute_base(rplane, fb);
 	rcar_du_plane_setup(rplane);

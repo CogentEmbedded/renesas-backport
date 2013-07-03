@@ -19,7 +19,6 @@
 
 struct drm_framebuffer;
 struct rcar_du_device;
-struct rcar_du_format_info;
 
 struct rcar_du_plane {
 	struct drm_plane plane;
@@ -54,8 +53,7 @@ void rcar_du_plane_setup(struct rcar_du_plane *plane);
 void rcar_du_plane_update_base(struct rcar_du_plane *plane);
 void rcar_du_plane_compute_base(struct rcar_du_plane *plane,
 				struct drm_framebuffer *fb);
-int rcar_du_plane_reserve(struct rcar_du_plane *plane,
-			  const struct rcar_du_format_info *format);
+int rcar_du_plane_reserve(struct rcar_du_plane *plane);
 void rcar_du_plane_release(struct rcar_du_plane *plane);
 
 #endif /* __RCAR_DU_PLANE_H__ */
