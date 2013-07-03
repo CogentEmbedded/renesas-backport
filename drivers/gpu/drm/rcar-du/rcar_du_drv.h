@@ -18,13 +18,12 @@
 #include <linux/platform_data/rcar-du.h>
 
 #include "rcar_du_crtc.h"
-#include "rcar_du_group.h"
+#include "rcar_du_plane.h"
 
 struct clk;
 struct device;
 struct drm_device;
 struct drm_fbdev_cma;
-struct rcar_du_device;
 
 #define RCAR_DU_FEATURE_CRTC_IRQ_CLOCK	(1 << 0)	/* Per-CRTC IRQ and clock */
 
@@ -42,14 +41,16 @@ struct rcar_du_device {
 	const struct rcar_du_device_info *info;
 
 	void __iomem *mmio;
+	unsigned int use_count;
 
 	struct drm_device *ddev;
 	struct drm_fbdev_cma *fbdev;
 
 	struct rcar_du_crtc crtcs[2];
+	unsigned int used_crtcs;
 	unsigned int num_crtcs;
 
-	struct rcar_du_group group;
+	struct rcar_du_planes planes;
 };
 
 static inline bool rcar_du_has(struct rcar_du_device *rcdu,
@@ -57,6 +58,9 @@ static inline bool rcar_du_has(struct rcar_du_device *rcdu,
 {
 	return rcdu->info->features & feature;
 }
+
+int rcar_du_get(struct rcar_du_device *rcdu);
+void rcar_du_put(struct rcar_du_device *rcdu);
 
 static inline u32 rcar_du_read(struct rcar_du_device *rcdu, u32 reg)
 {
