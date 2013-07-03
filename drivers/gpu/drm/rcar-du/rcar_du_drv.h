@@ -70,8 +70,6 @@ struct rcar_du_device {
 	unsigned int num_crtcs;
 
 	struct rcar_du_group groups[2];
-
-	unsigned int dpad0_source;
 };
 
 static inline bool rcar_du_has(struct rcar_du_device *rcdu,
