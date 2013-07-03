@@ -49,6 +49,8 @@ int rcar_du_plane_reserve(struct rcar_du_plane *plane)
 		if (plane->format->planes == 1 ||
 		    rcdu->planes.free & (1 << ((i + 1) % 8)))
 			break;
+
+		break;
 	}
 
 	if (i == ARRAY_SIZE(rcdu->planes.planes))
