@@ -142,16 +142,13 @@ void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
 
 	for (i = 0; i < num_planes; ++i) {
 		struct rcar_du_plane *plane = planes[i];
-		unsigned int index = plane->hwindex;
 
 		prio -= 4;
-		dspr |= (index + 1) << prio;
+		dspr |= (plane->hwindex + 1) << prio;
 
 		if (plane->format->planes == 2) {
-			index = (index + 1) % 8;
-
 			prio -= 4;
-			dspr |= (index + 1) << prio;
+			dspr |= (plane->hwindex + 2) << prio;
 		}
 	}
 
