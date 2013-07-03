@@ -1,5 +1,5 @@
 /*
- * rcar_du_vga.h  --  R-Car Display Unit VGA DAC
+ * rcar_du_vga.h  --  R-Car Display Unit VGA DAC and Connector
  *
  * Copyright (C) 2013 Renesas Corporation
  *
