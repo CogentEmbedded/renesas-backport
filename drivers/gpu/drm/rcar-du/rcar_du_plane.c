@@ -206,7 +206,6 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	struct rcar_du_plane *rplane = to_rcar_plane(plane);
 	struct rcar_du_device *rcdu = plane->dev->dev_private;
 	const struct rcar_du_format_info *format;
-	unsigned int nplanes;
 	int ret;
 
 	format = rcar_du_format_info(fb->pixel_format);
@@ -221,8 +220,6 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	nplanes = rplane->format ? rplane->format->planes : 0;
-
 	rplane->crtc = crtc;
 	rplane->format = format;
 	rplane->pitch = fb->pitches[0];
@@ -234,15 +231,9 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	rplane->width = crtc_w;
 	rplane->height = crtc_h;
 
-	/* Reallocate hardware planes if the number of required planes has
-	 * changed.
-	 */
-	if (format->planes != nplanes) {
-		rcar_du_plane_release(rplane);
-		ret = rcar_du_plane_reserve(rplane);
-		if (ret < 0)
-			return ret;
-	}
+	ret = rcar_du_plane_reserve(rplane);
+	if (ret < 0)
+		return ret;
 
 	rcar_du_plane_compute_base(rplane, fb);
 	rcar_du_plane_setup(rplane);
