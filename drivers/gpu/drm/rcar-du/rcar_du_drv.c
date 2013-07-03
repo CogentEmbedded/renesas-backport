@@ -136,27 +136,31 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (mem == NULL) {
 		dev_err(&pdev->dev, "failed to get memory resource\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto done;
 	}
 
 	ioarea = devm_request_mem_region(&pdev->dev, mem->start,
 					 resource_size(mem), pdev->name);
 	if (ioarea == NULL) {
 		dev_err(&pdev->dev, "failed to request memory region\n");
-		return -EBUSY;
+		ret = -EBUSY;
+		goto done;
 	}
 
 	rcdu->mmio = devm_ioremap_nocache(&pdev->dev, ioarea->start,
 					  resource_size(ioarea));
 	if (rcdu->mmio == NULL) {
 		dev_err(&pdev->dev, "failed to remap memory resource\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto done;
 	}
 
 	rcdu->clock = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(rcdu->clock)) {
 		dev_err(&pdev->dev, "failed to get clock\n");
-		return -ENOENT;
+		ret = -ENOENT;
+		goto done;
 	}
 
 	/* DRM/KMS objects */
