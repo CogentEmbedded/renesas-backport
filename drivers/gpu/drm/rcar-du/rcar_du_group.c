@@ -33,12 +33,12 @@
 #include "rcar_du_group.h"
 #include "rcar_du_regs.h"
 
-u32 rcar_du_group_read(struct rcar_du_group *rgrp, u32 reg)
+static u32 rcar_du_group_read(struct rcar_du_group *rgrp, u32 reg)
 {
 	return rcar_du_read(rgrp->dev, rgrp->mmio_offset + reg);
 }
 
-void rcar_du_group_write(struct rcar_du_group *rgrp, u32 reg, u32 data)
+static void rcar_du_group_write(struct rcar_du_group *rgrp, u32 reg, u32 data)
 {
 	rcar_du_write(rgrp->dev, rgrp->mmio_offset + reg, data);
 }

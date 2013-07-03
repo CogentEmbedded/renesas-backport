@@ -180,14 +180,9 @@ static const struct drm_mode_config_funcs rcar_du_mode_config_funcs = {
 
 int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 {
-	static const unsigned int mmio_offsets[] = {
-		DU0_REG_OFFSET, DU2_REG_OFFSET
-	};
-
 	struct drm_device *dev = rcdu->ddev;
 	struct drm_encoder *encoder;
 	struct drm_fbdev_cma *fbdev;
-	unsigned int num_groups;
 	unsigned int i;
 	int ret;
 
@@ -199,33 +194,22 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 	dev->mode_config.max_height = 2047;
 	dev->mode_config.funcs = &rcar_du_mode_config_funcs;
 
-	rcdu->num_crtcs = rcdu->info->num_crtcs;
+	rcdu->group.dev = rcdu;
+	rcdu->group.index = 0;
+	rcdu->group.used_crtcs = 0;
 
-	/* Initialize the groups. */
-	num_groups = DIV_ROUND_UP(rcdu->num_crtcs, 2);
+	ret = rcar_du_planes_init(&rcdu->group);
+	if (ret < 0)
+		return ret;
 
-	for (i = 0; i < num_groups; ++i) {
-		struct rcar_du_group *rgrp = &rcdu->groups[i];
-
-		rgrp->dev = rcdu;
-		rgrp->mmio_offset = mmio_offsets[i];
-		rgrp->index = i;
-
-		ret = rcar_du_planes_init(rgrp);
+	for (i = 0; i < ARRAY_SIZE(rcdu->crtcs); ++i) {
+		ret = rcar_du_crtc_create(&rcdu->group, i);
 		if (ret < 0)
 			return ret;
 	}
 
-	/* Create the CRTCs. */
-	for (i = 0; i < rcdu->num_crtcs; ++i) {
-		struct rcar_du_group *rgrp = &rcdu->groups[i / 2];
+	rcdu->num_crtcs = i;
 
-		ret = rcar_du_crtc_create(rgrp, i);
-		if (ret < 0)
-			return ret;
-	}
-
-	/* Initialize the encoders. */
 	for (i = 0; i < rcdu->pdata->num_encoders; ++i) {
 		const struct rcar_du_encoder_data *pdata =
 			&rcdu->pdata->encoders[i];
@@ -254,12 +238,9 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 		encoder->possible_clones = 1 << 0;
 	}
 
-	/* Now that the CRTCs have been initialized register the planes. */
-	for (i = 0; i < num_groups; ++i) {
-		ret = rcar_du_planes_register(&rcdu->groups[i]);
-		if (ret < 0)
-			return ret;
-	}
+	ret = rcar_du_planes_register(&rcdu->group);
+	if (ret < 0)
+		return ret;
 
 	drm_kms_helper_poll_init(dev);
 
