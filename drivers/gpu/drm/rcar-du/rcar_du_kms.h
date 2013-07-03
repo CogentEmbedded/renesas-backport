@@ -30,7 +30,6 @@ struct rcar_du_format_info {
 
 struct rcar_du_encoder {
 	struct drm_encoder encoder;
-	unsigned int output;
 };
 
 #define to_rcar_encoder(e) \

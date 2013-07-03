@@ -408,13 +408,11 @@
 #define DORCR_PG2D_DS2		(1 << 24)
 #define DORCR_PG2D_FIX0		(2 << 24)
 #define DORCR_PG2D_DOOR		(3 << 24)
-#define DORCR_PG2D_MASK		(3 << 24)
 #define DORCR_DR1D		(1 << 21)
 #define DORCR_PG1D_DS1		(0 << 16)
 #define DORCR_PG1D_DS2		(1 << 16)
 #define DORCR_PG1D_FIX0		(2 << 16)
 #define DORCR_PG1D_DOOR		(3 << 16)
-#define DORCR_PG1D_MASK		(3 << 16)
 #define DORCR_RGPV		(1 << 4)
 #define DORCR_DPRS		(1 << 0)
 
