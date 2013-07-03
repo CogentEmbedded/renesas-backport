@@ -445,11 +445,6 @@ static void rcar_du_crtc_mode_commit(struct drm_crtc *crtc)
 static int rcar_du_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 				      struct drm_framebuffer *old_fb)
 {
-	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
-
-	rcrtc->plane->src_x = x;
-	rcrtc->plane->src_y = y;
-
 	rcar_du_crtc_update_base(to_rcar_crtc(crtc));
 
 	return 0;
