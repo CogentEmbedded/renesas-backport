@@ -31,7 +31,6 @@ struct rcar_du_device {
 
 	void __iomem *mmio;
 	struct clk *clock;
-	unsigned int use_count;
 
 	struct drm_device *ddev;
 
@@ -48,9 +47,6 @@ struct rcar_du_device {
 		struct drm_property *zpos;
 	} planes;
 };
-
-int rcar_du_get(struct rcar_du_device *rcdu);
-void rcar_du_put(struct rcar_du_device *rcdu);
 
 static inline u32 rcar_du_read(struct rcar_du_device *rcdu, u32 reg)
 {

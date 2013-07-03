@@ -26,59 +26,6 @@
 #include "rcar_du_crtc.h"
 #include "rcar_du_drv.h"
 #include "rcar_du_kms.h"
-#include "rcar_du_regs.h"
-
-/* -----------------------------------------------------------------------------
- * Core device operations
- */
-
-/*
- * rcar_du_get - Acquire a reference to the DU
- *
- * Acquiring a reference enables the device clock and setup core registers. A
- * reference must be held before accessing any hardware registers.
- *
- * This function must be called with the DRM mode_config lock held.
- *
- * Return 0 in case of success or a negative error code otherwise.
- */
-int rcar_du_get(struct rcar_du_device *rcdu)
-{
-	int ret;
-
-	if (rcdu->use_count)
-		goto done;
-
-	/* Enable clocks before accessing the hardware. */
-	ret = clk_prepare_enable(rcdu->clock);
-	if (ret < 0)
-		return ret;
-
-	/* Enable extended features */
-	rcar_du_write(rcdu, DEFR, DEFR_CODE | DEFR_DEFE);
-	rcar_du_write(rcdu, DEFR2, DEFR2_CODE | DEFR2_DEFE2G);
-	rcar_du_write(rcdu, DEFR3, DEFR3_CODE | DEFR3_DEFE3);
-	rcar_du_write(rcdu, DEFR4, DEFR4_CODE);
-
-done:
-	rcdu->use_count++;
-	return 0;
-}
-
-/*
- * rcar_du_put - Release a reference to the DU
- *
- * Releasing the last reference disables the device clock.
- *
- * This function must be called with the DRM mode_config lock held.
- */
-void rcar_du_put(struct rcar_du_device *rcdu)
-{
-	if (--rcdu->use_count)
-		return;
-
-	clk_disable_unprepare(rcdu->clock);
-}
 
 /* -----------------------------------------------------------------------------
  * DRM operations

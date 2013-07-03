@@ -232,7 +232,14 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	if (WARN_ON(rcrtc->plane->format == NULL))
 		return;
 
-	rcar_du_get(rcdu);
+	/* Enable clocks before accessing the hardware. */
+	clk_prepare_enable(rcdu->clock);
+
+	/* Enable extended features */
+	rcar_du_write(rcdu, DEFR, DEFR_CODE | DEFR_DEFE);
+	rcar_du_write(rcdu, DEFR2, DEFR2_CODE | DEFR2_DEFE2G);
+	rcar_du_write(rcdu, DEFR3, DEFR3_CODE | DEFR3_DEFE3);
+	rcar_du_write(rcdu, DEFR4, DEFR4_CODE);
 
 	/* Set display off and background to black */
 	rcar_du_crtc_write(rcrtc, DOOR, DOOR_RGB(0, 0, 0));
@@ -290,7 +297,7 @@ static void rcar_du_crtc_stop(struct rcar_du_crtc *rcrtc)
 
 	rcar_du_start_stop(rcdu, false);
 
-	rcar_du_put(rcdu);
+	clk_disable_unprepare(rcdu->clock);
 
 	rcrtc->started = false;
 }
