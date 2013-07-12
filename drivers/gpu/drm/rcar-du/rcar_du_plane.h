@@ -14,10 +14,14 @@
 #ifndef __RCAR_DU_PLANE_H__
 #define __RCAR_DU_PLANE_H__
 
-struct drm_crtc;
-struct drm_framebuffer;
+#include <linux/mutex.h>
+
+#include <drm/drmP.h>
+#include <drm/drm_crtc.h>
+
 struct rcar_du_device;
 struct rcar_du_format_info;
+struct rcar_du_group;
 
 /* The RCAR DU has 8 hardware planes, shared between KMS planes and CRTCs. As
  * using KMS planes requires at least one of the CRTCs being enabled, no more
@@ -29,13 +33,21 @@ struct rcar_du_format_info;
 #define RCAR_DU_NUM_HW_PLANES		8
 #define RCAR_DU_NUM_SW_PLANES		9
 
+enum rcar_du_plane_source {
+	RCAR_DU_PLANE_MEMORY,
+	RCAR_DU_PLANE_VSPD0,
+	RCAR_DU_PLANE_VSPD1,
+};
+
 struct rcar_du_plane {
-	struct rcar_du_device *dev;
+	struct rcar_du_group *group;
 	struct drm_crtc *crtc;
 
 	bool enabled;
 
 	int hwindex;		/* 0-based, -1 means unused */
+	enum rcar_du_plane_source source;
+
 	unsigned int alpha;
 	unsigned int colorkey;
 	unsigned int zpos;
@@ -54,8 +66,21 @@ struct rcar_du_plane {
 	unsigned int dst_y;
 };
 
-int rcar_du_plane_init(struct rcar_du_device *rcdu);
-int rcar_du_plane_register(struct rcar_du_device *rcdu);
+struct rcar_du_planes {
+	struct rcar_du_plane planes[RCAR_DU_NUM_SW_PLANES];
+	unsigned int free;
+	struct mutex lock;
+
+	struct drm_property *alpha;
+	struct drm_property *colorkey;
+	struct drm_property *zpos;
+};
+
+int rcar_du_vsp1_sources_init(struct rcar_du_device *rcdu);
+
+int rcar_du_planes_init(struct rcar_du_group *rgrp);
+int rcar_du_planes_register(struct rcar_du_group *rgrp);
+
 void rcar_du_plane_setup(struct rcar_du_plane *plane);
 void rcar_du_plane_update_base(struct rcar_du_plane *plane);
 void rcar_du_plane_compute_base(struct rcar_du_plane *plane,

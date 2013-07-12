@@ -460,7 +460,7 @@ nouveau_fbcon_destroy(struct drm_device *dev, struct nouveau_fbdev *nfbdev)
 		drm_gem_object_unreference_unlocked(nouveau_fb->nvbo->gem);
 		nouveau_fb->nvbo = NULL;
 	}
-	drm_fb_helper_fini(&nfbdev->helper);
+	drm_framebuffer_unregister_private(&nouveau_fb->base);
 	drm_framebuffer_cleanup(&nouveau_fb->base);
 	return 0;
 }

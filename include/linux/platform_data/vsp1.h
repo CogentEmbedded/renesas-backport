@@ -1,5 +1,5 @@
 /*
- * rcar_du_vga.h  --  R-Car Display Unit VGA DAC and Connector
+ * vsp1.h  --  R-Car VSP1 Platform Data
  *
  * Copyright (C) 2013 Renesas Corporation
  *
@@ -10,15 +10,16 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+#ifndef __PLATFORM_VSP1_H__
+#define __PLATFORM_VSP1_H__
 
-#ifndef __RCAR_DU_VGA_H__
-#define __RCAR_DU_VGA_H__
+#define VSP1_HAS_LIF		(1 << 0)
 
-struct rcar_du_device;
-struct rcar_du_encoder_vga_data;
+struct vsp1_platform_data {
+	unsigned int features;
+	unsigned int rpf_count;
+	unsigned int uds_count;
+	unsigned int wpf_count;
+};
 
-int rcar_du_vga_init(struct rcar_du_device *rcdu,
-		     const struct rcar_du_encoder_vga_data *data,
-		     unsigned int output);
-
-#endif /* __RCAR_DU_VGA_H__ */
+#endif /* __PLATFORM_VSP1_H__ */

@@ -186,11 +186,12 @@
           <varlistentry>
             <term>DRIVER_HAVE_IRQ</term><term>DRIVER_IRQ_SHARED</term>
             <listitem><para>
-              DRIVER_HAVE_IRQ indicates whether the driver has an IRQ handler. The
-              DRM core will automatically register an interrupt handler when the
-              flag is set. DRIVER_IRQ_SHARED indicates whether the device &amp;
-              handler support shared IRQs (note that this is required of PCI
-              drivers).
+              DRIVER_HAVE_IRQ indicates whether the driver has an IRQ handler
+	      managed by the DRM Core. The core will support simple IRQ handler
+	      installation when the flag is set. The installation process is
+	      described in <xref linkend="drm-irq-registration"/>.</para>
+	      <para>DRIVER_IRQ_SHARED indicates whether the device &amp; handler
+	      support shared IRQs (note that this is required of PCI  drivers).
             </para></listitem>
           </varlistentry>
           <varlistentry>
@@ -344,7 +345,8 @@ char *date;</synopsis>
           The DRM core tries to facilitate IRQ handler registration and
           unregistration by providing <function>drm_irq_install</function> and
           <function>drm_irq_uninstall</function> functions. Those functions only
-          support a single interrupt per device.
+          support a single interrupt per device, devices that use more than one
+	  IRQs need to be handled manually.
         </para>
   <!--!Fdrivers/char/drm/drm_irq.c drm_irq_install-->
         <para>

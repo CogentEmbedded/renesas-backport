@@ -6859,8 +6859,10 @@ void intel_release_load_detect_pipe(struct intel_encoder *intel_encoder,
 		connector->encoder = NULL;
 		drm_helper_disable_unused_functions(dev);
 
-		if (old->release_fb)
-			old->release_fb->funcs->destroy(old->release_fb);
+		if (old->release_fb) {
+			drm_framebuffer_unregister_private(old->release_fb);
+			drm_framebuffer_unreference(old->release_fb);
+		}
 
 		return;
 	}
