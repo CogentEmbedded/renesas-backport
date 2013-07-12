@@ -45,6 +45,7 @@ config V4L2_MEM2MEM_DEV
 	depends on VIDEOBUF2_CORE
 
 config VIDEOBUF2_CORE
+	select DMA_SHARED_BUFFER
 	tristate
 
 config VIDEOBUF2_MEMOPS
