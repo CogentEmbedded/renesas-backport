@@ -185,6 +185,7 @@ enum v4l2_memory {
 	V4L2_MEMORY_MMAP             = 1,
 	V4L2_MEMORY_USERPTR          = 2,
 	V4L2_MEMORY_OVERLAY          = 3,
+	V4L2_MEMORY_DMABUF           = 4,
 };
 
 /* see also http://vektor.theorem.ca/graphics/ycbcr/ */
@@ -359,7 +360,11 @@ struct v4l2_pix_format {
 
 /* two non contiguous planes - one Y, one Cr + Cb interleaved  */
 #define V4L2_PIX_FMT_NV12M   v4l2_fourcc('N', 'M', '1', '2') /* 12  Y/CbCr 4:2:0  */
+#define V4L2_PIX_FMT_NV21M   v4l2_fourcc('N', 'M', '2', '1') /* 21  Y/CrCb 4:2:0  */
+#define V4L2_PIX_FMT_NV16M   v4l2_fourcc('N', 'M', '1', '6') /* 16  Y/CbCr 4:2:2  */
+#define V4L2_PIX_FMT_NV61M   v4l2_fourcc('N', 'M', '6', '1') /* 16  Y/CrCb 4:2:2  */
 #define V4L2_PIX_FMT_NV12MT  v4l2_fourcc('T', 'M', '1', '2') /* 12  Y/CbCr 4:2:0 64x32 macroblocks */
+#define V4L2_PIX_FMT_NV12MT_16X16 v4l2_fourcc('V', 'M', '1', '2') /* 12  Y/CbCr 4:2:0 16x16 macroblocks */
 
 /* three non contiguous planes - Y, Cb, Cr */
 #define V4L2_PIX_FMT_YUV420M v4l2_fourcc('Y', 'M', '1', '2') /* 12  YUV420 planar */
@@ -392,6 +397,7 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_MPEG     v4l2_fourcc('M', 'P', 'E', 'G') /* MPEG-1/2/4 Multiplexed */
 #define V4L2_PIX_FMT_H264     v4l2_fourcc('H', '2', '6', '4') /* H264 with start codes */
 #define V4L2_PIX_FMT_H264_NO_SC v4l2_fourcc('A', 'V', 'C', '1') /* H264 without start codes */
+#define V4L2_PIX_FMT_H264_MVC v4l2_fourcc('M', '2', '6', '4') /* H264 MVC */
 #define V4L2_PIX_FMT_H263     v4l2_fourcc('H', '2', '6', '3') /* H263          */
 #define V4L2_PIX_FMT_MPEG1    v4l2_fourcc('M', 'P', 'G', '1') /* MPEG-1 ES     */
 #define V4L2_PIX_FMT_MPEG2    v4l2_fourcc('M', 'P', 'G', '2') /* MPEG-2 ES     */
@@ -399,6 +405,7 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_XVID     v4l2_fourcc('X', 'V', 'I', 'D') /* Xvid           */
 #define V4L2_PIX_FMT_VC1_ANNEX_G v4l2_fourcc('V', 'C', '1', 'G') /* SMPTE 421M Annex G compliant stream */
 #define V4L2_PIX_FMT_VC1_ANNEX_L v4l2_fourcc('V', 'C', '1', 'L') /* SMPTE 421M Annex L compliant stream */
+#define V4L2_PIX_FMT_VP8      v4l2_fourcc('V', 'P', '8', '0') /* VP8 */
 
 /*  Vendor-specific formats   */
 #define V4L2_PIX_FMT_CPIA1    v4l2_fourcc('C', 'P', 'I', 'A') /* cpia1 YUV */
@@ -588,6 +595,8 @@ struct v4l2_requestbuffers {
  *			should be passed to mmap() called on the video node)
  * @userptr:		when memory is V4L2_MEMORY_USERPTR, a userspace pointer
  *			pointing to this plane
+ * @fd:			when memory is V4L2_MEMORY_DMABUF, a userspace file
+ *			descriptor associated with this plane
  * @data_offset:	offset in the plane to the start of data; usually 0,
  *			unless there is a header in front of the data
  *
@@ -602,6 +611,7 @@ struct v4l2_plane {
 	union {
 		__u32		mem_offset;
 		unsigned long	userptr;
+		__s32		fd;
 	} m;
 	__u32			data_offset;
 	__u32			reserved[11];
@@ -624,6 +634,8 @@ struct v4l2_plane {
  *		(or a "cookie" that should be passed to mmap() as offset)
  * @userptr:	for non-multiplanar buffers with memory == V4L2_MEMORY_USERPTR;
  *		a userspace pointer pointing to this buffer
+ * @fd:		for non-multiplanar buffers with memory == V4L2_MEMORY_DMABUF;
+ *		a userspace file descriptor associated with this buffer
  * @planes:	for multiplanar buffers; userspace pointer to the array of plane
  *		info structs for this buffer
  * @length:	size in bytes of the buffer (NOT its payload) for single-plane
@@ -650,6 +662,7 @@ struct v4l2_buffer {
 		__u32           offset;
 		unsigned long   userptr;
 		struct v4l2_plane *planes;
+		__s32		fd;
 	} m;
 	__u32			length;
 	__u32			input;
@@ -671,6 +684,11 @@ struct v4l2_buffer {
 /* Cache handling flags */
 #define V4L2_BUF_FLAG_NO_CACHE_INVALIDATE	0x0800
 #define V4L2_BUF_FLAG_NO_CACHE_CLEAN		0x1000
+/* Timestamp type */
+#define V4L2_BUF_FLAG_TIMESTAMP_MASK		0xe000
+#define V4L2_BUF_FLAG_TIMESTAMP_UNKNOWN		0x0000
+#define V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC	0x2000
+#define V4L2_BUF_FLAG_TIMESTAMP_COPY		0x4000
 
 /*
  *	O V E R L A Y   P R E V I E W
@@ -986,29 +1004,56 @@ struct v4l2_dv_enum_preset {
  *	D V 	B T	T I M I N G S
  */
 
-/* BT.656/BT.1120 timing data */
+/** struct v4l2_bt_timings - BT.656/BT.1120 timing data
+ * @width:	total width of the active video in pixels
+ * @height:	total height of the active video in lines
+ * @interlaced:	Interlaced or progressive
+ * @polarities:	Positive or negative polarities
+ * @pixelclock:	Pixel clock in HZ. Ex. 74.25MHz->74250000
+ * @hfrontporch:Horizontal front porch in pixels
+ * @hsync:	Horizontal Sync length in pixels
+ * @hbackporch:	Horizontal back porch in pixels
+ * @vfrontporch:Vertical front porch in lines
+ * @vsync:	Vertical Sync length in lines
+ * @vbackporch:	Vertical back porch in lines
+ * @il_vfrontporch:Vertical front porch for the even field
+ *		(aka field 2) of interlaced field formats
+ * @il_vsync:	Vertical Sync length for the even field
+ *		(aka field 2) of interlaced field formats
+ * @il_vbackporch:Vertical back porch for the even field
+ *		(aka field 2) of interlaced field formats
+ * @standards:	Standards the timing belongs to
+ * @flags:	Flags
+ * @reserved:	Reserved fields, must be zeroed.
+ *
+ * A note regarding vertical interlaced timings: height refers to the total
+ * height of the active video frame (= two fields). The blanking timings refer
+ * to the blanking of each field. So the height of the total frame is
+ * calculated as follows:
+ *
+ * tot_height = height + vfrontporch + vsync + vbackporch +
+ *                       il_vfrontporch + il_vsync + il_vbackporch
+ *
+ * The active height of each field is height / 2.
+ */
 struct v4l2_bt_timings {
-	__u32	width;		/* width in pixels */
-	__u32	height;		/* height in lines */
-	__u32	interlaced;	/* Interlaced or progressive */
-	__u32	polarities;	/* Positive or negative polarity */
-	__u64	pixelclock;	/* Pixel clock in HZ. Ex. 74.25MHz->74250000 */
-	__u32	hfrontporch;	/* Horizpontal front porch in pixels */
-	__u32	hsync;		/* Horizontal Sync length in pixels */
-	__u32	hbackporch;	/* Horizontal back porch in pixels */
-	__u32	vfrontporch;	/* Vertical front porch in pixels */
-	__u32	vsync;		/* Vertical Sync length in lines */
-	__u32	vbackporch;	/* Vertical back porch in lines */
-	__u32	il_vfrontporch;	/* Vertical front porch for bottom field of
-				 * interlaced field formats
-				 */
-	__u32	il_vsync;	/* Vertical sync length for bottom field of
-				 * interlaced field formats
-				 */
-	__u32	il_vbackporch;	/* Vertical back porch for bottom field of
-				 * interlaced field formats
-				 */
-	__u32	reserved[16];
+	__u32	width;
+	__u32	height;
+	__u32	interlaced;
+	__u32	polarities;
+	__u64	pixelclock;
+	__u32	hfrontporch;
+	__u32	hsync;
+	__u32	hbackporch;
+	__u32	vfrontporch;
+	__u32	vsync;
+	__u32	vbackporch;
+	__u32	il_vfrontporch;
+	__u32	il_vsync;
+	__u32	il_vbackporch;
+	__u32	standards;
+	__u32	flags;
+	__u32	reserved[14];
 } __attribute__ ((packed));
 
 /* Interlaced or progressive format */
@@ -1019,8 +1064,42 @@ struct v4l2_bt_timings {
 #define V4L2_DV_VSYNC_POS_POL	0x00000001
 #define V4L2_DV_HSYNC_POS_POL	0x00000002
 
+/* Timings standards */
+#define V4L2_DV_BT_STD_CEA861	(1 << 0)  /* CEA-861 Digital TV Profile */
+#define V4L2_DV_BT_STD_DMT	(1 << 1)  /* VESA Discrete Monitor Timings */
+#define V4L2_DV_BT_STD_CVT	(1 << 2)  /* VESA Coordinated Video Timings */
+#define V4L2_DV_BT_STD_GTF	(1 << 3)  /* VESA Generalized Timings Formula */
 
-/* DV timings */
+/* Flags */
+
+/* CVT/GTF specific: timing uses reduced blanking (CVT) or the 'Secondary
+   GTF' curve (GTF). In both cases the horizontal and/or vertical blanking
+   intervals are reduced, allowing a higher resolution over the same
+   bandwidth. This is a read-only flag. */
+#define V4L2_DV_FL_REDUCED_BLANKING		(1 << 0)
+/* CEA-861 specific: set for CEA-861 formats with a framerate of a multiple
+   of six. These formats can be optionally played at 1 / 1.001 speed.
+   This is a read-only flag. */
+#define V4L2_DV_FL_CAN_REDUCE_FPS		(1 << 1)
+/* CEA-861 specific: only valid for video transmitters, the flag is cleared
+   by receivers.
+   If the framerate of the format is a multiple of six, then the pixelclock
+   used to set up the transmitter is divided by 1.001 to make it compatible
+   with 60 Hz based standards such as NTSC and PAL-M that use a framerate of
+   29.97 Hz. Otherwise this flag is cleared. If the transmitter can't generate
+   such frequencies, then the flag will also be cleared. */
+#define V4L2_DV_FL_REDUCED_FPS			(1 << 2)
+/* Specific to interlaced formats: if set, then field 1 is really one half-line
+   longer and field 2 is really one half-line shorter, so each field has
+   exactly the same number of half-lines. Whether half-lines can be detected
+   or used depends on the hardware. */
+#define V4L2_DV_FL_HALF_LINE			(1 << 0)
+
+
+/** struct v4l2_dv_timings - DV timings
+ * @type:	the type of the timings
+ * @bt:	BT656/1120 timings
+ */
 struct v4l2_dv_timings {
 	__u32 type;
 	union {
@@ -1031,6 +1110,64 @@ struct v4l2_dv_timings {
 
 /* Values for the type field */
 #define V4L2_DV_BT_656_1120	0	/* BT.656/1120 timing type */
+
+
+/** struct v4l2_enum_dv_timings - DV timings enumeration
+ * @index:	enumeration index
+ * @reserved:	must be zeroed
+ * @timings:	the timings for the given index
+ */
+struct v4l2_enum_dv_timings {
+	__u32 index;
+	__u32 reserved[3];
+	struct v4l2_dv_timings timings;
+};
+
+/** struct v4l2_bt_timings_cap - BT.656/BT.1120 timing capabilities
+ * @min_width:		width in pixels
+ * @max_width:		width in pixels
+ * @min_height:		height in lines
+ * @max_height:		height in lines
+ * @min_pixelclock:	Pixel clock in HZ. Ex. 74.25MHz->74250000
+ * @max_pixelclock:	Pixel clock in HZ. Ex. 74.25MHz->74250000
+ * @standards:		Supported standards
+ * @capabilities:	Supported capabilities
+ * @reserved:		Must be zeroed
+ */
+struct v4l2_bt_timings_cap {
+	__u32	min_width;
+	__u32	max_width;
+	__u32	min_height;
+	__u32	max_height;
+	__u64	min_pixelclock;
+	__u64	max_pixelclock;
+	__u32	standards;
+	__u32	capabilities;
+	__u32	reserved[16];
+} __attribute__ ((packed));
+
+/* Supports interlaced formats */
+#define V4L2_DV_BT_CAP_INTERLACED	(1 << 0)
+/* Supports progressive formats */
+#define V4L2_DV_BT_CAP_PROGRESSIVE	(1 << 1)
+/* Supports CVT/GTF reduced blanking */
+#define V4L2_DV_BT_CAP_REDUCED_BLANKING	(1 << 2)
+/* Supports custom formats */
+#define V4L2_DV_BT_CAP_CUSTOM		(1 << 3)
+
+/** struct v4l2_dv_timings_cap - DV timings capabilities
+ * @type:	the type of the timings (same as in struct v4l2_dv_timings)
+ * @bt:		the BT656/1120 timings capabilities
+ */
+struct v4l2_dv_timings_cap {
+	__u32 type;
+	__u32 reserved[3];
+	union {
+		struct v4l2_bt_timings_cap bt;
+		__u32 raw_data[32];
+	};
+};
+
 
 /*
  *	V I D E O   I N P U T S
@@ -2407,6 +2544,12 @@ struct v4l2_create_buffers {
    versions. */
 #define VIDIOC_DECODER_CMD	_IOWR('V', 96, struct v4l2_decoder_cmd)
 #define VIDIOC_TRY_DECODER_CMD	_IOWR('V', 97, struct v4l2_decoder_cmd)
+
+/* Experimental, these three ioctls may change over the next couple of kernel
+   versions. */
+#define VIDIOC_ENUM_DV_TIMINGS  _IOWR('V', 96, struct v4l2_enum_dv_timings)
+#define VIDIOC_QUERY_DV_TIMINGS  _IOR('V', 97, struct v4l2_dv_timings)
+#define VIDIOC_DV_TIMINGS_CAP   _IOWR('V', 98, struct v4l2_dv_timings_cap)
 
 /* Reminder: when adding new ioctls please add support for them to
    drivers/media/video/v4l2-compat-ioctl32.c as well! */

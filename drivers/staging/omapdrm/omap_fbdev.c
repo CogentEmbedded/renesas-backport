@@ -274,8 +274,10 @@ fail:
 	if (ret) {
 		if (fbi)
 			framebuffer_release(fbi);
-		if (fb)
+		if (fb) {
+			drm_framebuffer_unregister_private(fb);
 			drm_framebuffer_remove(fb);
+		}
 	}
 
 	return ret;
@@ -396,8 +398,10 @@ void omap_fbdev_free(struct drm_device *dev)
 	fbdev = to_omap_fbdev(priv->fbdev);
 
 	/* this will free the backing object */
-	if (fbdev->fb)
+	if (fbdev->fb) {
+		drm_framebuffer_unregister_private(fbdev->fb);
 		drm_framebuffer_remove(fbdev->fb);
+	}
 
 	kfree(fbdev);
 

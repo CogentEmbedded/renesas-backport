@@ -23,6 +23,8 @@
 #include "rcar_lvds_regs.h"
 
 struct rcar_du_lvdsenc {
+	struct rcar_du_device *dev;
+
 	unsigned int index;
 	void __iomem *mmio;
 	struct clk *clock;
@@ -71,14 +73,14 @@ static int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
 	 * DISP  -> CTRL2
 	 * 0     -> CTRL3
 	 *
-	 * FIXME: Channels 1 and 3 need to be switched, find out why.
+	 * Channels 1 and 3 are switched on ES1.
 	 */
 	rcar_lvds_write(lvds, LVDCTRCR, LVDCTRCR_CTR3SEL_ZERO |
 			LVDCTRCR_CTR2SEL_DISP | LVDCTRCR_CTR1SEL_VSYNC |
 			LVDCTRCR_CTR0SEL_HSYNC);
-	rcar_lvds_write(lvds, LVDCHCR, LVDCHCR_CHSEL_CH(0, 0) |
-			LVDCHCR_CHSEL_CH(1, 3) | LVDCHCR_CHSEL_CH(2, 2) |
-			LVDCHCR_CHSEL_CH(3, 1));
+	rcar_lvds_write(lvds, LVDCHCR,
+			LVDCHCR_CHSEL_CH(0, 0) | LVDCHCR_CHSEL_CH(1, 3) |
+			LVDCHCR_CHSEL_CH(2, 2) | LVDCHCR_CHSEL_CH(3, 1));
 
 	/* Select the input, hardcode mode 0, enable LVDS operation and turn
 	 * bias circuitry on.
@@ -176,6 +178,7 @@ int rcar_du_lvdsenc_init(struct rcar_du_device *rcdu)
 			return -ENOMEM;
 		}
 
+		lvds->dev = rcdu;
 		lvds->index = i;
 		lvds->input = i ? RCAR_LVDS_INPUT_DU1 : RCAR_LVDS_INPUT_DU0;
 		lvds->dpms = DRM_MODE_DPMS_OFF;

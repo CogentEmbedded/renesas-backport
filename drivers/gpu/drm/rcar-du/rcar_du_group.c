@@ -52,10 +52,13 @@ static void rcar_du_group_setup_defr8(struct rcar_du_group *rgrp)
 		return;
 
 	/* The DEFR8 register for the first group also controls RGB output
-	 * routing to DPAD0
+	 * routing to DPAD0 and VSPD1 routing to DU0/1/2.
 	 */
-	if (rgrp->index == 0)
+	if (rgrp->index == 0) {
 		defr8 |= DEFR8_DRGBS_DU(rgrp->dev->dpad0_source);
+		if (rgrp->dev->vspd1_sink == 2)
+			defr8 |= DEFR8_VSCS;
+	}
 
 	rcar_du_group_write(rgrp, DEFR8, defr8);
 }
@@ -145,11 +148,30 @@ void rcar_du_group_restart(struct rcar_du_group *rgrp)
 	__rcar_du_group_start_stop(rgrp, true);
 }
 
+int rcar_du_set_dpad0_vsp1_routing(struct rcar_du_device *rcdu)
+{
+	int ret;
+
+	/* RGB output routing to DPAD0 and VSP1D routing to DU0/1/2 are
+	 * configured in the DEFR8 register of the first group. As this function
+	 * can be called with the DU0 and DU1 CRTCs disabled, we need to enable
+	 * the first group clock before accessing the register.
+	 */
+	ret = clk_prepare_enable(rcdu->crtcs[0].clock);
+	if (ret < 0)
+		return ret;
+
+	rcar_du_group_setup_defr8(&rcdu->groups[0]);
+
+	clk_disable_unprepare(rcdu->crtcs[0].clock);
+
+	return 0;
+}
+
 int rcar_du_group_set_routing(struct rcar_du_group *rgrp)
 {
 	struct rcar_du_crtc *crtc0 = &rgrp->dev->crtcs[rgrp->index * 2];
 	u32 dorcr = rcar_du_group_read(rgrp, DORCR);
-	int ret;
 
 	dorcr &= ~(DORCR_PG2T | DORCR_DK2S | DORCR_PG2D_MASK);
 
@@ -164,16 +186,5 @@ int rcar_du_group_set_routing(struct rcar_du_group *rgrp)
 
 	rcar_du_group_write(rgrp, DORCR, dorcr);
 
-	/* RGB output routing to DPAD0 is configured in the first group
-	 * registers. The corresponding clock must be enabled to access the
-	 * register.
-	 */
-	ret = clk_prepare_enable(rgrp->dev->crtcs[0].clock);
-	if (ret < 0)
-		return ret;
-
-	rcar_du_group_setup_defr8(&rgrp->dev->groups[0]);
-	clk_disable_unprepare(rgrp->dev->crtcs[0].clock);
-
-	return 0;
+	return rcar_du_set_dpad0_vsp1_routing(rgrp->dev);
 }

@@ -44,6 +44,7 @@ static int rcar_du_unload(struct drm_device *dev)
 	drm_mode_config_cleanup(dev);
 	drm_vblank_cleanup(dev);
 
+	dev->irq_enabled = 0;
 	dev->dev_private = NULL;
 
 	return 0;
@@ -76,16 +77,9 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 
 	/* I/O resources */
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (mem == NULL) {
-		dev_err(&pdev->dev, "failed to get memory resource\n");
-		return -EINVAL;
-	}
-
 	rcdu->mmio = devm_ioremap_resource(&pdev->dev, mem);
-	if (rcdu->mmio == NULL) {
-		dev_err(&pdev->dev, "failed to remap memory resource\n");
-		return -ENOMEM;
-	}
+	if (IS_ERR(rcdu->mmio))
+		return PTR_ERR(rcdu->mmio);
 
 	/* DRM/KMS objects */
 	ret = rcar_du_modeset_init(rcdu);
@@ -100,6 +94,8 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 		dev_err(&pdev->dev, "failed to initialize vblank\n");
 		goto done;
 	}
+
+	dev->irq_enabled = 1;
 
 	platform_set_drvdata(pdev, rcdu);
 
@@ -250,7 +246,7 @@ static const struct rcar_du_device_info rcar_du_r8a7779_info = {
 
 static const struct rcar_du_device_info rcar_du_r8a7790_info = {
 	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_ALIGN_128B
-		  | RCAR_DU_FEATURE_DEFR8,
+		  | RCAR_DU_FEATURE_DEFR8 | RCAR_DU_FEATURE_VSP1_SOURCE,
 	.num_crtcs = 3,
 	.routes = {
 		/* R8A7790 has one RGB output, two LVDS outputs and one

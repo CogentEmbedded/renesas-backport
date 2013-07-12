@@ -388,7 +388,8 @@ snb_get_colorkey(struct drm_plane *plane, struct drm_intel_sprite_colorkey *key)
 
 static int
 intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
-		   struct drm_framebuffer *fb, int crtc_x, int crtc_y,
+		   struct drm_framebuffer *fb, struct drm_live_source *src,
+		   int crtc_x, int crtc_y,
 		   unsigned int crtc_w, unsigned int crtc_h,
 		   uint32_t src_x, uint32_t src_y,
 		   uint32_t src_w, uint32_t src_h)

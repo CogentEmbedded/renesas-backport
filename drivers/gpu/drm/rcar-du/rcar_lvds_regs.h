@@ -32,7 +32,7 @@
 #define LVDPLLCR_CEEN			(1 << 14)
 #define LVDPLLCR_FBEN			(1 << 13)
 #define LVDPLLCR_COSEL			(1 << 12)
-#define LVDPLLCR_PLLDLYCNT_150M		(0x1c7 << 0)
+#define LVDPLLCR_PLLDLYCNT_150M		(0x1bf << 0)
 #define LVDPLLCR_PLLDLYCNT_121M		(0x22c << 0)
 #define LVDPLLCR_PLLDLYCNT_60M		(0x77b << 0)
 #define LVDPLLCR_PLLDLYCNT_38M		(0x69a << 0)

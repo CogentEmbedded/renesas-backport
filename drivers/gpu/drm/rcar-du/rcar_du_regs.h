@@ -13,9 +13,9 @@
 #ifndef __RCAR_DU_REGS_H__
 #define __RCAR_DU_REGS_H__
 
-#define DU0_REG_OFFSET	 	0x00000
-#define DU1_REG_OFFSET	 	0x30000
-#define DU2_REG_OFFSET	 	0x40000
+#define DU0_REG_OFFSET		0x00000
+#define DU1_REG_OFFSET		0x30000
+#define DU2_REG_OFFSET		0x40000
 
 /* -----------------------------------------------------------------------------
  * Display Control Registers
@@ -388,6 +388,7 @@
 
 #define PnDDCR4			0x00190
 #define PnDDCR4_CODE		(0x7766 << 16)
+#define PnDDCR4_VSPS		(1 << 13)
 #define PnDDCR4_SDFS_RGB	(0 << 4)
 #define PnDDCR4_SDFS_YC		(5 << 4)
 #define PnDDCR4_SDFS_MASK	(7 << 4)

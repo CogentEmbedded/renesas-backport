@@ -11,6 +11,8 @@
  * (at your option) any later version.
  */
 
+#include <linux/moduleparam.h>
+
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
@@ -23,6 +25,9 @@
 #include "rcar_du_kms.h"
 #include "rcar_du_lvdsenc.h"
 #include "rcar_du_regs.h"
+
+static bool rcar_du_fbdev_pan = false;
+module_param_named(fb_cma_pan, rcar_du_fbdev_pan, bool, 0444);
 
 /* -----------------------------------------------------------------------------
  * Format helpers
@@ -271,12 +276,19 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 			return ret;
 	}
 
+	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_VSP1_SOURCE)) {
+		ret = rcar_du_vsp1_sources_init(rcdu);
+		if (ret < 0)
+			return ret;
+	}
+
 	drm_kms_helper_poll_init(dev);
 
 	drm_helper_disable_unused_functions(dev);
 
 	fbdev = drm_fbdev_cma_init(dev, 32, dev->mode_config.num_crtc,
-				   dev->mode_config.num_connector);
+				   dev->mode_config.num_connector,
+				   rcar_du_fbdev_pan ? 2 : 1);
 	if (IS_ERR(fbdev))
 		return PTR_ERR(fbdev);
 
