@@ -356,6 +356,7 @@ static const char *r8a7790_boards_compat_dt[] __initdata = {
 };
 
 DT_MACHINE_START(R8A7790_DT, "Generic R8A7790 (Flattened Device Tree)")
+	.smp		= smp_ops(r8a7790_smp_ops),
 	.init_early	= r8a7790_init_delay,
 	.timer		= &r8a7790_timer,
 	.dt_compat	= r8a7790_boards_compat_dt,
