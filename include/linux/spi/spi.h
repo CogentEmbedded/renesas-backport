@@ -577,6 +577,7 @@ struct spi_message {
 	/* completion is reported through a callback */
 	void			(*complete)(void *context);
 	void			*context;
+	unsigned		frame_length;
 	unsigned		actual_length;
 	int			status;
 
