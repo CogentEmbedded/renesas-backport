@@ -3,6 +3,7 @@
 
 #include <linux/sh_clk.h>
 #include <linux/pm_domain.h>
+#include <linux/sh_eth.h>
 
 struct platform_device;
 struct rcar_du_platform_data;
