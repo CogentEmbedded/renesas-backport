@@ -30,7 +30,9 @@
 #include <linux/platform_data/rcar-du.h>
 #include <linux/platform_data/vsp1.h>
 #include <linux/platform_device.h>
+#include <linux/sh_eth.h>
 #include <mach/common.h>
+#include <mach/irqs.h>
 #include <mach/r8a7790.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -134,6 +136,20 @@ static struct vsp1_platform_data lager_vspd1_pdata = {
 	.wpf_count = 4,
 };
 
+/* Ether */
+static struct sh_eth_plat_data ether_pdata __initdata = {
+	.phy			= 0x1,
+	.edmac_endian		= EDMAC_LITTLE_ENDIAN,
+	.register_type		= SH_ETH_REG_FAST_RCAR,
+	.phy_interface		= PHY_INTERFACE_MODE_RMII,
+	.ether_link_active_low	= 1,
+};
+
+static struct resource ether_resources[] __initdata = {
+	DEFINE_RES_MEM(0xee700000, 0x400),
+	DEFINE_RES_IRQ(gic_spi(162)), /* IRQ0 */
+};
+
 static const struct pinctrl_map lager_pinctrl_map[] = {
 	/* DU (CN10: ARGB0, CN13: LVDS) */
 	PIN_MAP_MUX_GROUP_DEFAULT("rcar-du-r8a7790", "pfc-r8a7790",
@@ -148,6 +164,15 @@ static const struct pinctrl_map lager_pinctrl_map[] = {
 	/* SCIF1 (CN20: DEBUG SERIAL1) */
 	PIN_MAP_MUX_GROUP_DEFAULT("sh-sci.7", "pfc-r8a7790",
 				  "scif1_data", "scif1"),
+	/* Ether */
+	PIN_MAP_MUX_GROUP_DEFAULT("sh-eth", "pfc-r8a7790",
+				  "eth_link", "eth"),
+	PIN_MAP_MUX_GROUP_DEFAULT("sh-eth", "pfc-r8a7790",
+				  "eth_mdio", "eth"),
+	PIN_MAP_MUX_GROUP_DEFAULT("sh-eth", "pfc-r8a7790",
+				  "eth_rmii", "eth"),
+	PIN_MAP_MUX_GROUP_DEFAULT("sh-eth", "pfc-r8a7790",
+				  "intc_irq0", "intc"),
 };
 
 static void __init lager_add_standard_devices(void)
@@ -169,6 +194,10 @@ static void __init lager_add_standard_devices(void)
 				      sizeof(lager_keys_pdata));
 
 	r8a7790_add_vsp1_device(&lager_vspd0_pdata, 2);
+	platform_device_register_resndata(&platform_bus, "r8a7790-ether", -1,
+					  ether_resources,
+					  ARRAY_SIZE(ether_resources),
+					  &ether_pdata, sizeof(ether_pdata));
 }
 
 static const char *lager_boards_compat_dt[] __initdata = {
