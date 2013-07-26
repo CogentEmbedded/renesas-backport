@@ -1195,6 +1195,7 @@ void drm_mode_config_init(struct drm_device *dev)
 	INIT_LIST_HEAD(&dev->mode_config.property_list);
 	INIT_LIST_HEAD(&dev->mode_config.property_blob_list);
 	INIT_LIST_HEAD(&dev->mode_config.plane_list);
+	INIT_LIST_HEAD(&dev->mode_config.live_source_list);
 	idr_init(&dev->mode_config.crtc_idr);
 
 	drm_modeset_lock_all(dev);
