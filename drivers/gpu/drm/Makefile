@@ -45,5 +45,4 @@ obj-$(CONFIG_DRM_EXYNOS) +=exynos/
 obj-$(CONFIG_DRM_GMA500) += gma500/
 obj-$(CONFIG_DRM_UDL) += udl/
 obj-$(CONFIG_DRM_RCAR_DU) += rcar-du/
-obj-$(CONFIG_DRM_SHMOBILE) +=shmobile/
 obj-y			+= i2c/
