@@ -1,0 +1,116 @@
+menu "SoC Audio support for SuperH"
+	depends on SUPERH || ARCH_SHMOBILE
+
+config SND_SOC_PCM_SH7760
+	tristate "SoC Audio support for Renesas SH7760"
+	depends on CPU_SUBTYPE_SH7760 && SH_DMABRG
+	help
+	  Enable this option for SH7760 AC97/I2S audio support.
+
+
+##
+## Audio unit modules
+##
+
+config SND_SOC_SH4_HAC
+	tristate
+	select AC97_BUS
+	select SND_SOC_AC97_BUS
+
+config SND_SOC_SH4_SSI
+	tristate
+
+config SND_SOC_SH4_FSI
+	tristate "SH4 FSI support"
+	select SND_SIMPLE_CARD
+	help
+	  This option enables FSI sound support
+
+config SND_SOC_SH4_SIU
+	tristate
+	depends on (SUPERH || ARCH_SHMOBILE) && HAVE_CLK
+	select DMA_ENGINE
+	select DMADEVICES
+	select SH_DMAE
+	select FW_LOADER
+
+config SND_SOC_SCU
+	tristate
+	depends on ARCH_SHMOBILE
+	select DMA_ENGINE
+	select DMADEVICES
+
+##
+## Boards
+##
+
+config SND_SH7760_AC97
+	tristate "SH7760 AC97 sound support"
+	depends on CPU_SUBTYPE_SH7760 && SND_SOC_PCM_SH7760
+	select SND_SOC_SH4_HAC
+	select SND_SOC_AC97_CODEC
+	help
+	  This option enables generic sound support for the first
+	  AC97 unit of the SH7760.
+
+config SND_SIU_MIGOR
+	tristate "SIU sound support on Migo-R"
+	depends on SH_MIGOR
+	select SND_SOC_SH4_SIU
+	select SND_SOC_WM8978
+	help
+	  This option enables sound support for the SH7722 Migo-R board
+
+config SND_SCU_LAGER
+	tristate "SCU sound support on LAGER"
+	depends on MACH_LAGER
+	select SND_SOC_SCU
+	select SND_LAGER_AK4643
+	help
+	  Enable sound support for the R8A77900 LAGER board.
+	  This is supported to the Renesas SCU peripheral.
+	  Say Y here if you have enabled, otherwise say N.
+	  To compile this driver as a module, say M.
+
+config SND_LAGER_AK4643
+        tristate "LAGER AK4643 sound support"
+        depends on SND_SCU_LAGER
+        select SND_SOC_AK4642
+        help
+          Enable the sound support for AK4643 on LAGER board.
+	  This option is dependent on SND_SCU_LAGER.
+	  If you will enable, say Y to SND_SCU_LAGER.
+	  This option enables SND_SOC_AK4642.
+
+config SND_SOC_LAGER_AK4643
+        bool
+        depends on SND_LAGER_AK4643
+        default y
+
+config SND_SCU_KOELSCH
+	tristate "SCU sound support on KOELSCH"
+	depends on MACH_KOELSCH
+	select SND_SOC_SCU
+	select SND_KOELSCH_AK4643
+	help
+	  Enable sound support for the R8A77910 KOELSCH board.
+	  This is supported to the Renesas SCU peripheral.
+	  Say Y here if you have enabled, otherwise say N.
+	  To compile this driver as a module, say M.
+
+config SND_KOELSCH_AK4643
+        tristate "KOELSCH AK4643 sound support"
+        depends on SND_SCU_KOELSCH
+        select SND_SOC_AK4642
+        help
+          Enable the sound support for AK4643 on KOELSCH board.
+	  This option is dependent on SND_SCU_KOELSCH.
+	  If you will enable, say Y to SND_SCU_KOELSCH.
+	  This option enables SND_SOC_AK4642.
+
+config SND_SOC_KOELSCH_AK4643
+        bool
+        depends on SND_KOELSCH_AK4643
+        default y
+
+endmenu
