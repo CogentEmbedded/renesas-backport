@@ -11,7 +11,7 @@
  * (at your option) any later version.
  */
 
-#include <media/v4l2-subdev.h>
+#include <linux/v4l2-subdev.h>
 
 #include "vsp1.h"
 #include "vsp1_rwpf.h"
