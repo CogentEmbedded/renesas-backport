@@ -156,11 +156,11 @@ int vsp1_rwpf_get_selection(struct v4l2_subdev *subdev,
 		return -EINVAL;
 
 	switch (sel->target) {
-	case V4L2_SEL_TGT_CROP:
+	case V4L2_SUBDEV_SEL_TGT_CROP_ACTUAL:
 		sel->r = *vsp1_rwpf_get_crop(rwpf, fh, sel->which);
 		break;
 
-	case V4L2_SEL_TGT_CROP_BOUNDS:
+	case V4L2_SUBDEV_SEL_TGT_CROP_BOUNDS:
 		format = vsp1_entity_get_pad_format(&rwpf->entity, fh,
 						    RWPF_PAD_SINK, sel->which);
 		sel->r.left = 0;
@@ -188,7 +188,7 @@ int vsp1_rwpf_set_selection(struct v4l2_subdev *subdev,
 	if (sel->pad != RWPF_PAD_SINK)
 		return -EINVAL;
 
-	if (sel->target != V4L2_SEL_TGT_CROP)
+	if (sel->target != V4L2_SUBDEV_SEL_TGT_CROP_ACTUAL)
 		return -EINVAL;
 
 	/* Make sure the crop rectangle is entirely contained in the image. The
