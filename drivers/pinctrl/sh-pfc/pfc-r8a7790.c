@@ -3355,6 +3355,13 @@ static const unsigned int usb0_pins[] = {
 static const unsigned int usb0_mux[] = {
 	USB0_PWEN_MARK, USB0_OVC_VBUS_MARK,
 };
+static const unsigned int usb0_ovc_vbus_pins[] = {
+	/* OVC/VBUS */
+	RCAR_GP_PIN(5, 19),
+};
+static const unsigned int usb0_ovc_vbus_mux[] = {
+	USB0_OVC_VBUS_MARK,
+};
 /* - USB1 ------------------------------------------------------------------- */
 static const unsigned int usb1_pins[] = {
 	/* PWEN, OVC */
@@ -3930,6 +3937,7 @@ static const struct sh_pfc_pin_group pinmux_groups[] = {
 	SH_PFC_PIN_GROUP(tpu0_to2),
 	SH_PFC_PIN_GROUP(tpu0_to3),
 	SH_PFC_PIN_GROUP(usb0),
+	SH_PFC_PIN_GROUP(usb0_ovc_vbus),
 	SH_PFC_PIN_GROUP(usb1),
 	SH_PFC_PIN_GROUP(usb2),
 	VIN_DATA_PIN_GROUP(vin0_data, 24),
@@ -4295,6 +4303,7 @@ static const char * const tpu0_groups[] = {
 
 static const char * const usb0_groups[] = {
 	"usb0",
+	"usb0_ovc_vbus",
 };
 
 static const char * const usb1_groups[] = {
