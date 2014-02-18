@@ -107,51 +107,6 @@
 	(!(priv->info->func) ? 0 :		\
 	 priv->info->func(param))
 
-
-/*
- *	basic function
- */
-u32 rsnd_read(struct rsnd_priv *priv,
-	      struct rsnd_mod *mod, enum rsnd_reg reg)
-{
-	void __iomem *base = rsnd_gen_reg_get(priv, mod, reg);
-
-	BUG_ON(!base);
-
-	return ioread32(base);
-}
-
-void rsnd_write(struct rsnd_priv *priv,
-		struct rsnd_mod *mod,
-		enum rsnd_reg reg, u32 data)
-{
-	void __iomem *base = rsnd_gen_reg_get(priv, mod, reg);
-	struct device *dev = rsnd_priv_to_dev(priv);
-
-	BUG_ON(!base);
-
-	dev_dbg(dev, "w %p : %08x\n", base, data);
-
-	iowrite32(data, base);
-}
-
-void rsnd_bset(struct rsnd_priv *priv, struct rsnd_mod *mod,
-	       enum rsnd_reg reg, u32 mask, u32 data)
-{
-	void __iomem *base = rsnd_gen_reg_get(priv, mod, reg);
-	struct device *dev = rsnd_priv_to_dev(priv);
-	u32 val;
-
-	BUG_ON(!base);
-
-	val = ioread32(base);
-	val &= ~mask;
-	val |= data & mask;
-	iowrite32(val, base);
-
-	dev_dbg(dev, "s %p : %08x\n", base, val);
-}
-
 /*
  *	rsnd_mod functions
  */
@@ -673,12 +628,6 @@ static struct snd_pcm_hardware rsnd_pcm_hardware = {
 			SNDRV_PCM_INFO_MMAP		|
 			SNDRV_PCM_INFO_MMAP_VALID	|
 			SNDRV_PCM_INFO_PAUSE,
-	.formats		= RSND_FMTS,
-	.rates			= RSND_RATES,
-	.rate_min		= 8000,
-	.rate_max		= 192000,
-	.channels_min		= 2,
-	.channels_max		= 2,
 	.buffer_bytes_max	= 64 * 1024,
 	.period_bytes_min	= 32,
 	.period_bytes_max	= 8192,
