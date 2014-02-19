@@ -89,7 +89,8 @@ enum {
 
 	/* GPSR6 */
 	FN_IP13_10, FN_IP13_11, FN_IP13_12, FN_IP13_13, FN_IP13_14,
-	FN_IP13_15, FN_IP13_18_16, FN_IP13_21_19, FN_IP13_22, FN_IP13_24_23,
+	FN_IP13_15, FN_IP13_18_16, FN_IP13_21_19,
+	FN_IP13_22, FN_IP13_24_23, FN_SD1_CLK,
 	FN_IP13_25, FN_IP13_26, FN_IP13_27, FN_IP13_30_28, FN_IP14_1_0,
 	FN_IP14_2, FN_IP14_3, FN_IP14_4, FN_IP14_5, FN_IP14_6, FN_IP14_7,
 	FN_IP14_10_8, FN_IP14_13_11, FN_IP14_16_14, FN_IP14_19_17,
@@ -788,6 +789,7 @@ static const u16 pinmux_data[] = {
 	PINMUX_DATA(USB1_PWEN_MARK, FN_USB1_PWEN),
 	PINMUX_DATA(USB1_OVC_MARK, FN_USB1_OVC),
 	PINMUX_DATA(DU0_DOTCLKIN_MARK, FN_DU0_DOTCLKIN),
+	PINMUX_DATA(SD1_CLK_MARK, FN_SD1_CLK),
 
 	/* IPSR0 */
 	PINMUX_IPSR_DATA(IP0_0, D0),
@@ -1983,6 +1985,53 @@ static const unsigned int msiof2_tx_pins[] = {
 static const unsigned int msiof2_tx_mux[] = {
 	MSIOF2_TXD_MARK,
 };
+/* - QSPI ------------------------------------------------------------------- */
+static const unsigned int qspi_ctrl_pins[] = {
+	/* SPCLK, SSL */
+	RCAR_GP_PIN(1, 4), RCAR_GP_PIN(1, 9),
+};
+static const unsigned int qspi_ctrl_mux[] = {
+	SPCLK_MARK, SSL_MARK,
+};
+static const unsigned int qspi_data2_pins[] = {
+	/* MOSI_IO0, MISO_IO1 */
+	RCAR_GP_PIN(1, 5), RCAR_GP_PIN(1, 6),
+};
+static const unsigned int qspi_data2_mux[] = {
+	MOSI_IO0_MARK, MISO_IO1_MARK,
+};
+static const unsigned int qspi_data4_pins[] = {
+	/* MOSI_IO0, MISO_IO1, IO2, IO3 */
+	RCAR_GP_PIN(1, 5), RCAR_GP_PIN(1, 6), RCAR_GP_PIN(1, 7),
+	RCAR_GP_PIN(1, 8),
+};
+static const unsigned int qspi_data4_mux[] = {
+	MOSI_IO0_MARK, MISO_IO1_MARK, IO2_MARK, IO3_MARK,
+};
+
+static const unsigned int qspi_ctrl_b_pins[] = {
+	/* SPCLK, SSL */
+	RCAR_GP_PIN(6, 0), RCAR_GP_PIN(6, 5),
+};
+static const unsigned int qspi_ctrl_b_mux[] = {
+	SPCLK_B_MARK, SSL_B_MARK,
+};
+static const unsigned int qspi_data2_b_pins[] = {
+	/* MOSI_IO0, MISO_IO1 */
+	RCAR_GP_PIN(6, 1), RCAR_GP_PIN(6, 2),
+};
+static const unsigned int qspi_data2_b_mux[] = {
+	MOSI_IO0_B_MARK, MISO_IO1_B_MARK,
+};
+static const unsigned int qspi_data4_b_pins[] = {
+	/* MOSI_IO0, MISO_IO1, IO2, IO3 */
+	RCAR_GP_PIN(6, 1), RCAR_GP_PIN(6, 2), RCAR_GP_PIN(6, 3),
+	RCAR_GP_PIN(6, 4),
+};
+static const unsigned int qspi_data4_b_mux[] = {
+	SPCLK_B_MARK, MOSI_IO0_B_MARK, MISO_IO1_B_MARK,
+	IO2_B_MARK, IO3_B_MARK, SSL_B_MARK,
+};
 /* - SCIF0 ------------------------------------------------------------------ */
 static const unsigned int scif0_data_pins[] = {
 	/* RX, TX */
@@ -2704,6 +2753,12 @@ static const struct sh_pfc_pin_group pinmux_groups[] = {
 	SH_PFC_PIN_GROUP(msiof2_ss2),
 	SH_PFC_PIN_GROUP(msiof2_rx),
 	SH_PFC_PIN_GROUP(msiof2_tx),
+	SH_PFC_PIN_GROUP(qspi_ctrl),
+	SH_PFC_PIN_GROUP(qspi_data2),
+	SH_PFC_PIN_GROUP(qspi_data4),
+	SH_PFC_PIN_GROUP(qspi_ctrl_b),
+	SH_PFC_PIN_GROUP(qspi_data2_b),
+	SH_PFC_PIN_GROUP(qspi_data4_b),
 	SH_PFC_PIN_GROUP(scif0_data),
 	SH_PFC_PIN_GROUP(scif0_data_b),
 	SH_PFC_PIN_GROUP(scif0_data_c),
@@ -2854,6 +2909,15 @@ static const char * const msiof2_groups[] = {
 	"msiof2_clk",
 	"msiof2_ctrl",
 	"msiof2_data",
+};
+
+static const char * const qspi_groups[] = {
+	"qspi_ctrl",
+	"qspi_data2",
+	"qspi_data4",
+	"qspi_ctrl_b",
+	"qspi_data2_b",
+	"qspi_data4_b",
 };
 
 static const char * const scif0_groups[] = {
@@ -3007,6 +3071,7 @@ static const struct sh_pfc_function pinmux_functions[] = {
 	SH_PFC_FUNCTION(msiof0),
 	SH_PFC_FUNCTION(msiof1),
 	SH_PFC_FUNCTION(msiof2),
+	SH_PFC_FUNCTION(qspi),
 	SH_PFC_FUNCTION(scif0),
 	SH_PFC_FUNCTION(scif1),
 	SH_PFC_FUNCTION(scif2),
@@ -3258,7 +3323,7 @@ static struct pinmux_cfg_reg pinmux_config_regs[] = {
 		GP_6_11_FN, FN_IP13_25,
 		GP_6_10_FN, FN_IP13_24_23,
 		GP_6_9_FN, FN_IP13_22,
-		0, 0,
+		GP_6_8_FN, FN_SD1_CLK,
 		GP_6_7_FN, FN_IP13_21_19,
 		GP_6_6_FN, FN_IP13_18_16,
 		GP_6_5_FN, FN_IP13_15,
