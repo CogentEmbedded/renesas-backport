@@ -21,23 +21,29 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 
 #include <linux/spi/sh_msiof.h>
 #include <linux/spi/spi.h>
-#include <linux/spi/spi_bitbang.h>
 
 #include <asm/unaligned.h>
 
+
+struct sh_msiof_chipdata {
+	u16 tx_fifo_size;
+	u16 rx_fifo_size;
+	u16 master_flags;
+};
+
 struct sh_msiof_spi_priv {
-	struct spi_bitbang bitbang; /* must be first for spi_bitbang.c */
 	void __iomem *mapbase;
 	struct clk *clk;
 	struct platform_device *pdev;
+	const struct sh_msiof_chipdata *chipdata;
 	struct sh_msiof_spi_info *info;
 	struct completion done;
-	unsigned long flags;
 	int tx_fifo_size;
 	int rx_fifo_size;
 };
@@ -111,10 +117,6 @@ struct sh_msiof_spi_priv {
 /* STR and IER */
 #define STR_TEOF	0x00800000 /* Frame Transmission End */
 #define STR_REOF	0x00000080 /* Frame Reception End */
-
-
-#define DEFAULT_TX_FIFO_SIZE	64
-#define DEFAULT_RX_FIFO_SIZE	64
 
 
 static u32 sh_msiof_read(struct sh_msiof_spi_priv *p, int reg_offs)
@@ -211,7 +213,8 @@ static void sh_msiof_spi_set_clk_regs(struct sh_msiof_spi_priv *p,
 	k = min_t(int, k, ARRAY_SIZE(sh_msiof_spi_clk_table) - 1);
 
 	sh_msiof_write(p, TSCR, sh_msiof_spi_clk_table[k].scr);
-	sh_msiof_write(p, RSCR, sh_msiof_spi_clk_table[k].scr);
+	if (!(p->chipdata->master_flags & SPI_MASTER_MUST_TX))
+		sh_msiof_write(p, RSCR, sh_msiof_spi_clk_table[k].scr);
 }
 
 static void sh_msiof_spi_set_pin_regs(struct sh_msiof_spi_priv *p,
@@ -234,6 +237,10 @@ static void sh_msiof_spi_set_pin_regs(struct sh_msiof_spi_priv *p,
 	tmp |= !cs_high << MDR1_SYNCAC_SHIFT;
 	tmp |= lsb_first << MDR1_BITLSB_SHIFT;
 	sh_msiof_write(p, TMDR1, tmp | MDR1_TRMD | TMDR1_PCON);
+	if (p->chipdata->master_flags & SPI_MASTER_MUST_TX) {
+		/* These bits are reserved if RX needs TX */
+		tmp &= ~0x0000ffff;
+	}
 	sh_msiof_write(p, RMDR1, tmp);
 
 	tmp = 0;
@@ -254,7 +261,7 @@ static void sh_msiof_spi_set_mode_regs(struct sh_msiof_spi_priv *p,
 {
 	u32 dr2 = MDR2_BITLEN1(bits) | MDR2_WDLEN1(words);
 
-	if (tx_buf)
+	if (tx_buf || (p->chipdata->master_flags & SPI_MASTER_MUST_TX))
 		sh_msiof_write(p, TMDR2, dr2);
 	else
 		sh_msiof_write(p, TMDR2, dr2 | MDR2_GRPMASK1);
@@ -430,25 +437,10 @@ static u32 sh_msiof_spi_hz(struct spi_device *spi, struct spi_transfer *t)
 	return hz;
 }
 
-static int sh_msiof_spi_setup_transfer(struct spi_device *spi,
-				       struct spi_transfer *t)
-{
-	int bits;
-
-	/* noting to check hz values against since parent clock is disabled */
-
-	bits = sh_msiof_spi_bits(spi, t);
-	if (bits < 8)
-		return -EINVAL;
-	if (bits > 32)
-		return -EINVAL;
-
-	return spi_bitbang_setup_transfer(spi, t);
-}
-
 static int sh_msiof_spi_setup(struct spi_device *spi)
 {
 	struct device_node	*np = spi->master->dev.of_node;
+	struct sh_msiof_spi_priv *p = spi_master_get_devdata(spi->master);
 
 	if (!np) {
 		/*
@@ -458,43 +450,45 @@ static int sh_msiof_spi_setup(struct spi_device *spi)
 		spi->cs_gpio = (uintptr_t)spi->controller_data;
 	}
 
-	return spi_bitbang_setup(spi);
-}
-
-static void sh_msiof_spi_chipselect(struct spi_device *spi, int is_on)
-{
-	struct sh_msiof_spi_priv *p = spi_master_get_devdata(spi->master);
-	int value;
-
-	/* chip select is active low unless SPI_CS_HIGH is set */
-	if (spi->mode & SPI_CS_HIGH)
-		value = (is_on == BITBANG_CS_ACTIVE) ? 1 : 0;
-	else
-		value = (is_on == BITBANG_CS_ACTIVE) ? 0 : 1;
-
-	if (is_on == BITBANG_CS_ACTIVE) {
-		if (!test_and_set_bit(0, &p->flags)) {
-			pm_runtime_get_sync(&p->pdev->dev);
-			clk_enable(p->clk);
-		}
-
-		/* Configure pins before asserting CS */
-		sh_msiof_spi_set_pin_regs(p, !!(spi->mode & SPI_CPOL),
-					  !!(spi->mode & SPI_CPHA),
-					  !!(spi->mode & SPI_3WIRE),
-					  !!(spi->mode & SPI_LSB_FIRST),
-					  !!(spi->mode & SPI_CS_HIGH));
-	}
+	/* Configure pins before deasserting CS */
+	sh_msiof_spi_set_pin_regs(p, !!(spi->mode & SPI_CPOL),
+				  !!(spi->mode & SPI_CPHA),
+				  !!(spi->mode & SPI_3WIRE),
+				  !!(spi->mode & SPI_LSB_FIRST),
+				  !!(spi->mode & SPI_CS_HIGH));
 
 	if (spi->cs_gpio >= 0)
-		gpio_set_value(spi->cs_gpio, value);
+		gpio_set_value(spi->cs_gpio, !(spi->mode & SPI_CS_HIGH));
 
-	if (is_on == BITBANG_CS_INACTIVE) {
-		if (test_and_clear_bit(0, &p->flags)) {
-			clk_disable(p->clk);
-			pm_runtime_put(&p->pdev->dev);
-		}
-	}
+	return 0;
+}
+
+static int sh_msiof_prepare_message(struct spi_master *master,
+				    struct spi_message *msg)
+{
+	struct sh_msiof_spi_priv *p = spi_master_get_devdata(master);
+	const struct spi_device *spi = msg->spi;
+
+	pm_runtime_get_sync(&p->pdev->dev);
+	clk_enable(p->clk);
+
+	/* Configure pins before asserting CS */
+	sh_msiof_spi_set_pin_regs(p, !!(spi->mode & SPI_CPOL),
+				  !!(spi->mode & SPI_CPHA),
+				  !!(spi->mode & SPI_3WIRE),
+				  !!(spi->mode & SPI_LSB_FIRST),
+				  !!(spi->mode & SPI_CS_HIGH));
+	return 0;
+}
+
+static int sh_msiof_unprepare_message(struct spi_master *master,
+				      struct spi_message *msg)
+{
+	struct sh_msiof_spi_priv *p = spi_master_get_devdata(master);
+
+	clk_disable(p->clk);
+	pm_runtime_put(&p->pdev->dev);
+	return 0;
 }
 
 static int sh_msiof_spi_txrx_once(struct sh_msiof_spi_priv *p,
@@ -566,9 +560,11 @@ static int sh_msiof_spi_txrx_once(struct sh_msiof_spi_priv *p,
 	return ret;
 }
 
-static int sh_msiof_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
+static int sh_msiof_transfer_one(struct spi_master *master,
+				 struct spi_device *spi,
+				 struct spi_transfer *t)
 {
-	struct sh_msiof_spi_priv *p = spi_master_get_devdata(spi->master);
+	struct sh_msiof_spi_priv *p = spi_master_get_devdata(master);
 	void (*tx_fifo)(struct sh_msiof_spi_priv *, const void *, int, int);
 	void (*rx_fifo)(struct sh_msiof_spi_priv *, void *, int, int);
 	int bits;
@@ -649,22 +645,36 @@ static int sh_msiof_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 		words -= n;
 	}
 
-	return bytes_done;
-}
-
-static u32 sh_msiof_spi_txrx_word(struct spi_device *spi, unsigned nsecs,
-				  u32 word, u8 bits)
-{
-	BUG(); /* unused but needed by bitbang code */
 	return 0;
 }
+
+static const struct sh_msiof_chipdata sh_data = {
+	.tx_fifo_size = 64,
+	.rx_fifo_size = 64,
+	.master_flags = 0,
+};
+
+static const struct sh_msiof_chipdata r8a779x_data = {
+	.tx_fifo_size = 64,
+	.rx_fifo_size = 256,
+	.master_flags = SPI_MASTER_MUST_TX,
+};
+
+static const struct of_device_id sh_msiof_match[] = {
+	{ .compatible = "renesas,sh-msiof",        .data = &sh_data },
+	{ .compatible = "renesas,sh-mobile-msiof", .data = &sh_data },
+	{ .compatible = "renesas,msiof-r8a7790",   .data = &r8a779x_data },
+	{ .compatible = "renesas,msiof-r8a7791",   .data = &r8a779x_data },
+	{},
+};
+MODULE_DEVICE_TABLE(of, sh_msiof_match);
 
 #ifdef CONFIG_OF
 static struct sh_msiof_spi_info *sh_msiof_spi_parse_dt(struct device *dev)
 {
 	struct sh_msiof_spi_info *info;
 	struct device_node *np = dev->of_node;
-	u32 num_cs = 0;
+	u32 num_cs = 1;
 
 	info = devm_kzalloc(dev, sizeof(struct sh_msiof_spi_info), GFP_KERNEL);
 	if (!info) {
@@ -694,6 +704,7 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 {
 	struct resource	*r;
 	struct spi_master *master;
+	const struct of_device_id *of_id;
 	struct sh_msiof_spi_priv *p;
 	int i;
 	int ret;
@@ -707,10 +718,15 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 	p = spi_master_get_devdata(master);
 
 	platform_set_drvdata(pdev, p);
-	if (pdev->dev.of_node)
+
+	of_id = of_match_device(sh_msiof_match, &pdev->dev);
+	if (of_id) {
+		p->chipdata = of_id->data;
 		p->info = sh_msiof_spi_parse_dt(&pdev->dev);
-	else
+	} else {
+		p->chipdata = (const void *)pdev->id_entry->driver_data;
 		p->info = dev_get_platdata(&pdev->dev);
+	}
 
 	if (!p->info) {
 		dev_err(&pdev->dev, "failed to obtain device info\n");
@@ -757,39 +773,36 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 	p->pdev = pdev;
 	pm_runtime_enable(&pdev->dev);
 
-	/* The standard version of MSIOF use 64 word FIFOs */
-	p->tx_fifo_size = DEFAULT_TX_FIFO_SIZE;
-	p->rx_fifo_size = DEFAULT_RX_FIFO_SIZE;
-
 	/* Platform data may override FIFO sizes */
+	p->tx_fifo_size = p->chipdata->tx_fifo_size;
+	p->rx_fifo_size = p->chipdata->rx_fifo_size;
 	if (p->info->tx_fifo_override)
 		p->tx_fifo_size = p->info->tx_fifo_override;
 	if (p->info->rx_fifo_override)
 		p->rx_fifo_size = p->info->rx_fifo_override;
 
-	/* init master and bitbang code */
+	/* init master code */
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_CS_HIGH;
 	master->mode_bits |= SPI_LSB_FIRST | SPI_3WIRE;
-	master->flags = 0;
+	master->flags = p->chipdata->master_flags;
 	master->bus_num = pdev->id;
 	master->dev.of_node = pdev->dev.of_node;
 	master->num_chipselect = p->info->num_chipselect;
 	master->setup = sh_msiof_spi_setup;
-	master->cleanup = spi_bitbang_cleanup;
+	master->prepare_message = sh_msiof_prepare_message;
+	master->unprepare_message = sh_msiof_unprepare_message;
+	master->bits_per_word_mask = SPI_BPW_RANGE_MASK(8, 32);
+	master->transfer_one = sh_msiof_transfer_one;
 
-	p->bitbang.master = master;
-	p->bitbang.chipselect = sh_msiof_spi_chipselect;
-	p->bitbang.setup_transfer = sh_msiof_spi_setup_transfer;
-	p->bitbang.txrx_bufs = sh_msiof_spi_txrx;
-	p->bitbang.txrx_word[SPI_MODE_0] = sh_msiof_spi_txrx_word;
-	p->bitbang.txrx_word[SPI_MODE_1] = sh_msiof_spi_txrx_word;
-	p->bitbang.txrx_word[SPI_MODE_2] = sh_msiof_spi_txrx_word;
-	p->bitbang.txrx_word[SPI_MODE_3] = sh_msiof_spi_txrx_word;
+	ret = devm_spi_register_master(&pdev->dev, master);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "spi_register_master error.\n");
+		goto err2;
+	}
 
-	ret = spi_bitbang_start(&p->bitbang);
-	if (ret == 0)
-		return 0;
+	return 0;
 
+ err2:
 	pm_runtime_disable(&pdev->dev);
 	clk_unprepare(p->clk);
  err1:
@@ -800,29 +813,24 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 static int sh_msiof_spi_remove(struct platform_device *pdev)
 {
 	struct sh_msiof_spi_priv *p = platform_get_drvdata(pdev);
-	int ret;
 
-	ret = spi_bitbang_stop(&p->bitbang);
-	if (!ret) {
-		pm_runtime_disable(&pdev->dev);
-		clk_unprepare(p->clk);
-		spi_master_put(p->bitbang.master);
-	}
-	return ret;
+	pm_runtime_disable(&pdev->dev);
+	clk_unprepare(p->clk);
+	return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id sh_msiof_match[] = {
-	{ .compatible = "renesas,sh-msiof", },
-	{ .compatible = "renesas,sh-mobile-msiof", },
+static struct platform_device_id spi_driver_ids[] = {
+	{ "spi_sh_msiof",	(kernel_ulong_t)&sh_data },
+	{ "spi_r8a7790_msiof",	(kernel_ulong_t)&r8a779x_data },
+	{ "spi_r8a7791_msiof",	(kernel_ulong_t)&r8a779x_data },
 	{},
 };
-MODULE_DEVICE_TABLE(of, sh_msiof_match);
-#endif
+MODULE_DEVICE_TABLE(platform, spi_driver_ids);
 
 static struct platform_driver sh_msiof_spi_drv = {
 	.probe		= sh_msiof_spi_probe,
 	.remove		= sh_msiof_spi_remove,
+	.id_table	= spi_driver_ids,
 	.driver		= {
 		.name		= "spi_sh_msiof",
 		.owner		= THIS_MODULE,

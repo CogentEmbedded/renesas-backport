@@ -25,6 +25,8 @@
 #include <linux/kthread.h>
 #include <linux/completion.h>
 
+struct dma_chan;
+
 /*
  * INTERFACES between SPI master-side drivers and SPI infrastructure.
  * (There's no SPI slave support for Linux yet...)
@@ -327,6 +329,9 @@ struct spi_master {
 
 	/* bitmask of supported bits_per_word for transfers */
 	u32			bits_per_word_mask;
+#define SPI_BPW_MASK(bits) BIT((bits) - 1)
+#define SPI_BIT_MASK(bits) (((bits) == 32) ? ~0UL : (BIT(bits) - 1))
+#define SPI_BPW_RANGE_MASK(min, max) (SPI_BIT_MASK(max) - SPI_BIT_MASK(min - 1))
 
 	/* limits on transfer speed */
 	u32			min_speed_hz;
@@ -337,8 +342,10 @@ struct spi_master {
 #define SPI_MASTER_HALF_DUPLEX	BIT(0)		/* can't do full duplex */
 #define SPI_MASTER_NO_RX	BIT(1)		/* can't do buffer read */
 #define SPI_MASTER_NO_TX	BIT(2)		/* can't do buffer write */
-#define SPI_MASTER_U_PAGE	BIT(3)		/* select upper flash */
-#define SPI_MASTER_QUAD_MODE	BIT(4)		/* support quad mode */
+#define SPI_MASTER_MUST_RX      BIT(3)		/* requires rx */
+#define SPI_MASTER_MUST_TX      BIT(4)		/* requires tx */
+#define SPI_MASTER_U_PAGE	BIT(5)		/* select upper flash */
+#define SPI_MASTER_QUAD_MODE	BIT(6)		/* support quad mode */
 
 	/* lock and mutex for SPI bus locking */
 	spinlock_t		bus_lock_spinlock;
@@ -381,6 +388,17 @@ struct spi_master {
 	void			(*cleanup)(struct spi_device *spi);
 
 	/*
+	 * Used to enable core support for DMA handling, if can_dma()
+	 * exists and returns true then the transfer will be mapped
+	 * prior to transfer_one() being called.  The driver should
+	 * not modify or store xfer and dma_tx and dma_rx must be set
+	 * while the device is prepared.
+	 */
+	bool			(*can_dma)(struct spi_master *master,
+					   struct spi_device *spi,
+					   struct spi_transfer *xfer);
+
+	/*
 	 * These hooks are for drivers that want to use the generic
 	 * master transfer queueing mechanism. If these are used, the
 	 * transfer() function above must NOT be specified by the driver.
@@ -397,6 +415,7 @@ struct spi_master {
 	bool				running;
 	bool				rt;
 	bool                            cur_msg_prepared;
+	bool				cur_msg_mapped;
 	struct completion               xfer_completion;
 
 	int (*prepare_transfer_hardware)(struct spi_master *master);
@@ -418,6 +437,14 @@ struct spi_master {
 
 	/* gpio chip select */
 	int			*cs_gpios;
+
+	/* DMA channels for use with core dmaengine helpers */
+	struct dma_chan		*dma_tx;
+	struct dma_chan		*dma_rx;
+
+	/* dummy data for full duplex devices */
+	void			*dummy_rx;
+	void			*dummy_tx;
 };
 
 static inline void *spi_master_get_devdata(struct spi_master *master)
