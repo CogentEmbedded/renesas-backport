@@ -24,6 +24,8 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/cache.h>
+#include <linux/dma-mapping.h>
+#include <linux/dmaengine.h>
 #include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
@@ -38,6 +40,9 @@
 #include <linux/kthread.h>
 #include <linux/ioport.h>
 #include <linux/acpi.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/spi.h>
 
 static void spidev_release(struct device *dev)
 {
@@ -523,6 +528,209 @@ int spi_register_board_info(struct spi_board_info const *info, unsigned n)
 
 /*-------------------------------------------------------------------------*/
 
+static void spi_set_cs(struct spi_device *spi, bool enable)
+{
+	if (spi->mode & SPI_CS_HIGH)
+		enable = !enable;
+
+	if (spi->cs_gpio >= 0)
+		gpio_set_value(spi->cs_gpio, !enable);
+	else if (spi->master->set_cs)
+		spi->master->set_cs(spi, !enable);
+}
+
+static int spi_map_msg(struct spi_master *master, struct spi_message *msg)
+{
+	struct device *dev = master->dev.parent;
+	struct device *tx_dev, *rx_dev;
+	struct spi_transfer *xfer;
+	void *tmp;
+	size_t max_tx, max_rx;
+
+	if (master->flags & (SPI_MASTER_MUST_RX | SPI_MASTER_MUST_TX)) {
+		max_tx = 0;
+		max_rx = 0;
+
+		list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+			if ((master->flags & SPI_MASTER_MUST_TX) &&
+			    !xfer->tx_buf)
+				max_tx = max(xfer->len, max_tx);
+			if ((master->flags & SPI_MASTER_MUST_RX) &&
+			    !xfer->rx_buf)
+				max_rx = max(xfer->len, max_rx);
+		}
+
+		if (max_tx) {
+			tmp = krealloc(master->dummy_tx, max_tx,
+				       GFP_KERNEL | GFP_DMA);
+			if (!tmp)
+				return -ENOMEM;
+			master->dummy_tx = tmp;
+			memset(tmp, 0, max_tx);
+		}
+
+		if (max_rx) {
+			tmp = krealloc(master->dummy_rx, max_rx,
+				       GFP_KERNEL | GFP_DMA);
+			if (!tmp)
+				return -ENOMEM;
+			master->dummy_rx = tmp;
+		}
+
+		if (max_tx || max_rx) {
+			list_for_each_entry(xfer, &msg->transfers,
+					    transfer_list) {
+				if (!xfer->tx_buf)
+					xfer->tx_buf = master->dummy_tx;
+				if (!xfer->rx_buf)
+					xfer->rx_buf = master->dummy_rx;
+			}
+		}
+	}
+
+	if (msg->is_dma_mapped || !master->can_dma)
+		return 0;
+
+	tx_dev = &master->dma_tx->dev->device;
+	rx_dev = &master->dma_rx->dev->device;
+
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		if (!master->can_dma(master, msg->spi, xfer))
+			continue;
+
+		if (xfer->tx_buf != NULL) {
+			xfer->tx_dma = dma_map_single(tx_dev,
+						      (void *)xfer->tx_buf,
+						      xfer->len,
+						      DMA_TO_DEVICE);
+			if (dma_mapping_error(dev, xfer->tx_dma)) {
+				dev_err(dev, "dma_map_single Tx failed\n");
+				return -ENOMEM;
+			}
+		}
+
+		if (xfer->rx_buf != NULL) {
+			xfer->rx_dma = dma_map_single(rx_dev,
+						      xfer->rx_buf, xfer->len,
+						      DMA_FROM_DEVICE);
+			if (dma_mapping_error(dev, xfer->rx_dma)) {
+				dev_err(dev, "dma_map_single Rx failed\n");
+				dma_unmap_single(tx_dev, xfer->tx_dma,
+						 xfer->len, DMA_TO_DEVICE);
+				return -ENOMEM;
+			}
+		}
+	}
+
+	master->cur_msg_mapped = true;
+
+	return 0;
+}
+
+static int spi_unmap_msg(struct spi_master *master, struct spi_message *msg)
+{
+	struct spi_transfer *xfer;
+	struct device *tx_dev, *rx_dev;
+
+	if (!master->cur_msg_mapped || msg->is_dma_mapped || !master->can_dma)
+		return 0;
+
+	tx_dev = &master->dma_tx->dev->device;
+	rx_dev = &master->dma_rx->dev->device;
+
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		if (!master->can_dma(master, msg->spi, xfer))
+			continue;
+
+		if (xfer->rx_buf)
+			dma_unmap_single(rx_dev, xfer->rx_dma, xfer->len,
+					 DMA_FROM_DEVICE);
+		if (xfer->tx_buf)
+			dma_unmap_single(tx_dev, xfer->tx_dma, xfer->len,
+					 DMA_TO_DEVICE);
+	}
+
+	return 0;
+}
+
+/*
+ * spi_transfer_one_message - Default implementation of transfer_one_message()
+ *
+ * This is a standard implementation of transfer_one_message() for
+ * drivers which impelment a transfer_one() operation.  It provides
+ * standard handling of delays and chip select management.
+ */
+static int spi_transfer_one_message(struct spi_master *master,
+				    struct spi_message *msg)
+{
+	struct spi_transfer *xfer;
+	bool cur_cs = true;
+	bool keep_cs = false;
+	int ret = 0;
+
+	spi_set_cs(msg->spi, true);
+
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		trace_spi_transfer_start(msg, xfer);
+
+		INIT_COMPLETION(master->xfer_completion);
+
+		ret = master->transfer_one(master, msg->spi, xfer);
+		if (ret < 0) {
+			dev_err(&msg->spi->dev,
+				"SPI transfer failed: %d\n", ret);
+			goto out;
+		}
+
+		if (ret > 0)
+			wait_for_completion(&master->xfer_completion);
+
+		trace_spi_transfer_stop(msg, xfer);
+
+		if (msg->status != -EINPROGRESS)
+			goto out;
+
+		if (xfer->delay_usecs)
+			udelay(xfer->delay_usecs);
+
+		if (xfer->cs_change) {
+			if (list_is_last(&xfer->transfer_list,
+					 &msg->transfers)) {
+				keep_cs = true;
+			} else {
+				cur_cs = !cur_cs;
+				spi_set_cs(msg->spi, cur_cs);
+			}
+		}
+
+		msg->actual_length += xfer->len;
+	}
+
+out:
+	if (ret != 0 || !keep_cs)
+		spi_set_cs(msg->spi, false);
+
+	if (msg->status == -EINPROGRESS)
+		msg->status = ret;
+
+	spi_finalize_current_message(master);
+
+	return ret;
+}
+
+/**
+ * spi_finalize_current_transfer - report completion of a transfer
+ *
+ * Called by SPI drivers using the core transfer_one_message()
+ * implementation to notify it that the current interrupt driven
+ * transfer has finised and the next one may be scheduled.
+ */
+void spi_finalize_current_transfer(struct spi_master *master)
+{
+	complete(&master->xfer_completion);
+}
+EXPORT_SYMBOL_GPL(spi_finalize_current_transfer);
+
 /**
  * spi_pump_messages - kthread work function which processes spi message queue
  * @work: pointer to kthread work struct contained in the master struct
@@ -549,10 +757,15 @@ static void spi_pump_messages(struct kthread_work *work)
 		}
 		master->busy = false;
 		spin_unlock_irqrestore(&master->queue_lock, flags);
+		kfree(master->dummy_rx);
+		master->dummy_rx = NULL;
+		kfree(master->dummy_tx);
+		master->dummy_tx = NULL;
 		if (master->unprepare_transfer_hardware &&
 		    master->unprepare_transfer_hardware(master))
 			dev_err(&master->dev,
 				"failed to unprepare transfer hardware\n");
+		trace_spi_master_idle(master);
 		return;
 	}
 
@@ -572,6 +785,9 @@ static void spi_pump_messages(struct kthread_work *work)
 		master->busy = true;
 	spin_unlock_irqrestore(&master->queue_lock, flags);
 
+	if (!was_busy)
+		trace_spi_master_busy(master);
+
 	if (!was_busy && master->prepare_transfer_hardware) {
 		ret = master->prepare_transfer_hardware(master);
 		if (ret) {
@@ -579,6 +795,27 @@ static void spi_pump_messages(struct kthread_work *work)
 				"failed to prepare transfer hardware\n");
 			return;
 		}
+	}
+
+	trace_spi_message_start(master->cur_msg);
+
+	if (master->prepare_message) {
+		ret = master->prepare_message(master, master->cur_msg);
+		if (ret) {
+			dev_err(&master->dev,
+				"failed to prepare message: %d\n", ret);
+			master->cur_msg->status = ret;
+			spi_finalize_current_message(master);
+			return;
+		}
+		master->cur_msg_prepared = true;
+	}
+
+	ret = spi_map_msg(master, master->cur_msg);
+	if (ret) {
+		master->cur_msg->status = ret;
+		spi_finalize_current_message(master);
+		return;
 	}
 
 	ret = master->transfer_one_message(master, master->cur_msg);
@@ -662,6 +899,7 @@ void spi_finalize_current_message(struct spi_master *master)
 {
 	struct spi_message *mesg;
 	unsigned long flags;
+	int ret;
 
 	spin_lock_irqsave(&master->queue_lock, flags);
 	mesg = master->cur_msg;
@@ -670,9 +908,22 @@ void spi_finalize_current_message(struct spi_master *master)
 	queue_kthread_work(&master->kworker, &master->pump_messages);
 	spin_unlock_irqrestore(&master->queue_lock, flags);
 
+	spi_unmap_msg(master, mesg);
+
+	if (master->cur_msg_prepared && master->unprepare_message) {
+		ret = master->unprepare_message(master, mesg);
+		if (ret) {
+			dev_err(&master->dev,
+				"failed to unprepare message: %d\n", ret);
+		}
+	}
+	master->cur_msg_prepared = false;
+
 	mesg->state = NULL;
 	if (mesg->complete)
 		mesg->complete(mesg->context);
+
+	trace_spi_message_done(mesg);
 }
 EXPORT_SYMBOL_GPL(spi_finalize_current_message);
 
@@ -787,6 +1038,8 @@ static int spi_master_initialize_queue(struct spi_master *master)
 
 	master->queued = true;
 	master->transfer = spi_queued_transfer;
+	if (!master->transfer_one_message)
+		master->transfer_one_message = spi_transfer_one_message;
 
 	/* Initialize and start queue */
 	ret = spi_init_queue(master);
@@ -868,6 +1121,51 @@ static void of_register_spi_devices(struct spi_master *master)
 			spi->mode |= SPI_CS_HIGH;
 		if (of_find_property(nc, "spi-3wire", NULL))
 			spi->mode |= SPI_3WIRE;
+
+		/* Device DUAL/QUAD mode */
+		prop = of_get_property(nc, "spi-tx-nbits", &len);
+		if (!prop || len < sizeof(*prop)) {
+			dev_err(&master->dev, "%s has no 'spi-tx-nbits' property\n",
+				nc->full_name);
+			spi_dev_put(spi);
+			continue;
+		}
+		switch (be32_to_cpup(prop)) {
+		case SPI_NBITS_SINGLE:
+			break;
+		case SPI_NBITS_DUAL:
+			spi->mode |= SPI_TX_DUAL;
+			break;
+		case SPI_NBITS_QUAD:
+			spi->mode |= SPI_TX_QUAD;
+			break;
+		default:
+			dev_err(&master->dev, "spi-tx-nbits value is not supported\n");
+			spi_dev_put(spi);
+			continue;
+		}
+
+		prop = of_get_property(nc, "spi-rx-nbits", &len);
+		if (!prop || len < sizeof(*prop)) {
+			dev_err(&master->dev, "%s has no 'spi-rx-nbits' property\n",
+				nc->full_name);
+			spi_dev_put(spi);
+			continue;
+		}
+		switch (be32_to_cpup(prop)) {
+		case SPI_NBITS_SINGLE:
+			break;
+		case SPI_NBITS_DUAL:
+			spi->mode |= SPI_RX_DUAL;
+			break;
+		case SPI_NBITS_QUAD:
+			spi->mode |= SPI_RX_QUAD;
+			break;
+		default:
+			dev_err(&master->dev, "spi-rx-nbits value is not supported\n");
+			spi_dev_put(spi);
+			continue;
+		}
 
 		/* Device speed */
 		prop = of_get_property(nc, "spi-max-frequency", &len);
@@ -1152,6 +1450,7 @@ int spi_register_master(struct spi_master *master)
 	spin_lock_init(&master->bus_lock_spinlock);
 	mutex_init(&master->bus_lock_mutex);
 	master->bus_lock_flag = 0;
+	init_completion(&master->xfer_completion);
 
 	/* register the device, then userspace will see it.
 	 * registration fails if the bus ID is in use.
@@ -1187,6 +1486,41 @@ done:
 	return status;
 }
 EXPORT_SYMBOL_GPL(spi_register_master);
+
+static void devm_spi_unregister(struct device *dev, void *res)
+{
+	spi_unregister_master(*(struct spi_master **)res);
+}
+
+/**
+ * dev_spi_register_master - register managed SPI master controller
+ * @dev:    device managing SPI master
+ * @master: initialized master, originally from spi_alloc_master()
+ * Context: can sleep
+ *
+ * Register a SPI device as with spi_register_master() which will
+ * automatically be unregister
+ */
+int devm_spi_register_master(struct device *dev, struct spi_master *master)
+{
+	struct spi_master **ptr;
+	int ret;
+
+	ptr = devres_alloc(devm_spi_unregister, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return -ENOMEM;
+
+	ret = spi_register_master(master);
+	if (ret != 0) {
+		*ptr = master;
+		devres_add(dev, ptr);
+	} else {
+		devres_free(ptr);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(devm_spi_register_master);
 
 static int __unregister(struct device *dev, void *null)
 {
@@ -1316,6 +1650,19 @@ int spi_setup(struct spi_device *spi)
 	unsigned	bad_bits;
 	int		status = 0;
 
+	/* check mode to prevent that DUAL and QUAD set at the same time
+	 */
+	if (((spi->mode & SPI_TX_DUAL) && (spi->mode & SPI_TX_QUAD)) ||
+		((spi->mode & SPI_RX_DUAL) && (spi->mode & SPI_RX_QUAD))) {
+		dev_err(&spi->dev,
+		"setup: can not select dual and quad at the same time\n");
+		return -EINVAL;
+	}
+	/* if it is SPI_3WIRE mode, DUAL and QUAD should be forbidden
+	 */
+	if ((spi->mode & SPI_3WIRE) && (spi->mode &
+		(SPI_TX_DUAL | SPI_TX_QUAD | SPI_RX_DUAL | SPI_RX_QUAD)))
+		return -EINVAL;
 	/* help drivers fail *cleanly* when they need options
 	 * that aren't supported with their current master
 	 */
@@ -1351,6 +1698,10 @@ static int __spi_async(struct spi_device *spi, struct spi_message *message)
 	struct spi_master *master = spi->master;
 	struct spi_transfer *xfer;
 
+	message->spi = spi;
+
+	trace_spi_message_submit(message);
+
 	/* Half-duplex links include original MicroWire, and ones with
 	 * only one data pin like SPI_3WIRE (switches direction) or where
 	 * either MOSI or MISO is missing.  They can also be caused by
@@ -1373,8 +1724,11 @@ static int __spi_async(struct spi_device *spi, struct spi_message *message)
 	/**
 	 * Set transfer bits_per_word and max speed as spi device default if
 	 * it is not set for this transfer.
+	 * Set transfer tx_nbits and rx_nbits as single transfer default
+	 * (SPI_NBITS_SINGLE) if it is not set for this transfer.
 	 */
 	list_for_each_entry(xfer, &message->transfers, transfer_list) {
+		message->frame_length += xfer->len;
 		if (!xfer->bits_per_word)
 			xfer->bits_per_word = spi->bits_per_word;
 		if (!xfer->speed_hz)
@@ -1387,9 +1741,52 @@ static int __spi_async(struct spi_device *spi, struct spi_message *message)
 					BIT(xfer->bits_per_word - 1)))
 				return -EINVAL;
 		}
+
+		if (xfer->speed_hz && master->min_speed_hz &&
+		    xfer->speed_hz < master->min_speed_hz)
+			return -EINVAL;
+		if (xfer->speed_hz && master->max_speed_hz &&
+		    xfer->speed_hz > master->max_speed_hz)
+			return -EINVAL;
+
+		if (xfer->tx_buf && !xfer->tx_nbits)
+			xfer->tx_nbits = SPI_NBITS_SINGLE;
+		if (xfer->rx_buf && !xfer->rx_nbits)
+			xfer->rx_nbits = SPI_NBITS_SINGLE;
+		/* check transfer tx/rx_nbits:
+		 * 1. keep the value is not out of single, dual and quad
+		 * 2. keep tx/rx_nbits is contained by mode in spi_device
+		 * 3. if SPI_3WIRE, tx/rx_nbits should be in single
+		 */
+		if (xfer->tx_nbits != SPI_NBITS_SINGLE &&
+			xfer->tx_nbits != SPI_NBITS_DUAL &&
+			xfer->tx_nbits != SPI_NBITS_QUAD)
+			return -EINVAL;
+		if ((xfer->tx_nbits == SPI_NBITS_DUAL) &&
+			!(spi->mode & (SPI_TX_DUAL | SPI_TX_QUAD)))
+			return -EINVAL;
+		if ((xfer->tx_nbits == SPI_NBITS_QUAD) &&
+			!(spi->mode & SPI_TX_QUAD))
+			return -EINVAL;
+		if ((spi->mode & SPI_3WIRE) &&
+			(xfer->tx_nbits != SPI_NBITS_SINGLE))
+			return -EINVAL;
+		/* check transfer rx_nbits */
+		if (xfer->rx_nbits != SPI_NBITS_SINGLE &&
+			xfer->rx_nbits != SPI_NBITS_DUAL &&
+			xfer->rx_nbits != SPI_NBITS_QUAD)
+			return -EINVAL;
+		if ((xfer->rx_nbits == SPI_NBITS_DUAL) &&
+			!(spi->mode & (SPI_RX_DUAL | SPI_RX_QUAD)))
+			return -EINVAL;
+		if ((xfer->rx_nbits == SPI_NBITS_QUAD) &&
+			!(spi->mode & SPI_RX_QUAD))
+			return -EINVAL;
+		if ((spi->mode & SPI_3WIRE) &&
+			(xfer->rx_nbits != SPI_NBITS_SINGLE))
+			return -EINVAL;
 	}
 
-	message->spi = spi;
 	message->status = -EINPROGRESS;
 	return master->transfer(spi, message);
 }
