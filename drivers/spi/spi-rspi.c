@@ -859,7 +859,9 @@ static int qspi_transfer_one(struct spi_master *master, struct spi_device *spi,
 {
 	struct rspi_data *rspi = spi_master_get_devdata(master);
 
-	if (xfer->tx_buf && xfer->tx_nbits > SPI_NBITS_SINGLE) {
+	if (spi->mode & SPI_LOOP) {
+		return qspi_transfer_out_in(rspi, xfer);
+	} else if (xfer->tx_buf && xfer->tx_nbits > SPI_NBITS_SINGLE) {
 		/* Quad or Dual SPI Write */
 		return qspi_transfer_out(rspi, xfer);
 	} else if (xfer->rx_buf && xfer->rx_nbits > SPI_NBITS_SINGLE) {
@@ -891,10 +893,6 @@ static int rspi_setup(struct spi_device *spi)
 	set_config_register(rspi, 8);
 
 	return 0;
-}
-
-static void rspi_cleanup(struct spi_device *spi)
-{
 }
 
 static u16 qspi_transfer_mode(const struct spi_transfer *xfer)
@@ -1255,7 +1253,6 @@ static int rspi_probe(struct platform_device *pdev)
 	master->bus_num = pdev->id;
 	master->setup = rspi_setup;
 	master->transfer_one = ops->transfer_one;
-	master->cleanup = rspi_cleanup;
 	master->prepare_message = rspi_prepare_message;
 	master->unprepare_message = rspi_unprepare_message;
 	master->mode_bits = ops->mode_bits;
