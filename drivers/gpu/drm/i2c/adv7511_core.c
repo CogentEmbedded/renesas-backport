@@ -837,11 +837,11 @@ static int adv7511_probe(struct i2c_client *i2c,
 	struct adv7511 *adv7511;
 	unsigned int val;
 	int ret;
-#if defined(CONFIG_DRM_RCAR_DU)
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
 	unsigned int timeout;
 #endif
 
-#ifndef CONFIG_DRM_RCAR_DU
+#if !defined(CONFIG_DRM_RCAR_DU) && !defined(CONFIG_DRM_RCAR_DU_MODULE)
 	if (i2c->dev.of_node) {
 		ret = adv7511_parse_dt(i2c->dev.of_node, &link_config);
 		if (ret)
@@ -939,7 +939,7 @@ static int adv7511_probe(struct i2c_client *i2c,
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
 			ADV7511_POWER_POWER_DOWN, 0);
 
-#if defined(CONFIG_DRM_RCAR_DU)
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
 	/* Wait status of hotplug detect and hotplug interrupts */
 	for (timeout = 0; timeout < TIMEOUT_STATUS_HPD; timeout++) {
 		regmap_read(adv7511->regmap, ADV7511_REG_STATUS, &val);
@@ -953,7 +953,7 @@ static int adv7511_probe(struct i2c_client *i2c,
 
 	i2c_set_clientdata(i2c, adv7511);
 
-#ifndef CONFIG_DRM_RCAR_DU
+#if !defined(CONFIG_DRM_RCAR_DU) && !defined(CONFIG_DRM_RCAR_DU_MODULE)
 	adv7511_set_link_config(adv7511, &link_config);
 #else
 	if (link_config.adi_dt_flag)
