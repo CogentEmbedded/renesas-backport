@@ -3,6 +3,7 @@
  *  Copyright (C) 2006-2012 Nobuhiro Iwamatsu
  *  Copyright (C) 2008-2014 Renesas Solutions Corp.
  *  Copyright (C) 2013-2014 Cogent Embedded, Inc.
+ *  Copyright (C) 2014 Codethink Limited
  *
  *  This program is free software; you can redistribute it and/or modify it
  *  under the terms and conditions of the GNU General Public License,
@@ -41,6 +42,7 @@
 #include <linux/if_vlan.h>
 #include <linux/clk.h>
 #include <linux/sh_eth.h>
+#include <linux/of_mdio.h>
 
 #include "sh_eth.h"
 
@@ -871,7 +873,7 @@ static int sh_eth_reset(struct net_device *ndev)
 
 		ret = sh_eth_check_reset(ndev);
 		if (ret)
-			goto out;
+			return ret;
 
 		/* Table Init */
 		sh_eth_write(ndev, 0x0, TDLAR);
@@ -898,7 +900,6 @@ static int sh_eth_reset(struct net_device *ndev)
 			     EDMR);
 	}
 
-out:
 	return ret;
 }
 
@@ -1262,7 +1263,7 @@ static int sh_eth_dev_init(struct net_device *ndev, bool start)
 	/* Soft Reset */
 	ret = sh_eth_reset(ndev);
 	if (ret)
-		goto out;
+		return ret;
 
 	if (mdp->cd->rmiimode)
 		sh_eth_write(ndev, 0x1, RMIIMODE);
@@ -1341,7 +1342,6 @@ static int sh_eth_dev_init(struct net_device *ndev, bool start)
 		netif_start_queue(ndev);
 	}
 
-out:
 	return ret;
 }
 
@@ -1762,22 +1762,37 @@ static void sh_eth_adjust_link(struct net_device *ndev)
 /* PHY init function */
 static int sh_eth_phy_init(struct net_device *ndev)
 {
+	struct device_node *np = ndev->dev.parent->of_node;
 	struct sh_eth_private *mdp = netdev_priv(ndev);
-	char phy_id[MII_BUS_ID_SIZE + 3];
 	struct phy_device *phydev = NULL;
-
-	snprintf(phy_id, sizeof(phy_id), PHY_ID_FMT,
-		 mdp->mii_bus->id, mdp->phy_id);
 
 	mdp->link = 0;
 	mdp->speed = 0;
 	mdp->duplex = -1;
 
 	/* Try connect to PHY */
-	phydev = phy_connect(ndev, phy_id, sh_eth_adjust_link,
-			     mdp->phy_interface);
+	if (np) {
+		struct device_node *pn;
+
+		pn = of_parse_phandle(np, "phy-handle", 0);
+		phydev = of_phy_connect(ndev, pn,
+					sh_eth_adjust_link, 0,
+					mdp->phy_interface);
+
+		if (!phydev)
+			phydev = ERR_PTR(-ENOENT);
+	} else {
+		char phy_id[MII_BUS_ID_SIZE + 3];
+
+		snprintf(phy_id, sizeof(phy_id), PHY_ID_FMT,
+			 mdp->mii_bus->id, mdp->phy_id);
+
+		phydev = phy_connect(ndev, phy_id, sh_eth_adjust_link,
+				     mdp->phy_interface);
+	}
+
 	if (IS_ERR(phydev)) {
-		dev_err(&ndev->dev, "phy_connect failed\n");
+		dev_err(&ndev->dev, "failed to connect PHY\n");
 		return PTR_ERR(phydev);
 	}
 
@@ -2576,37 +2591,30 @@ static void sh_eth_tsu_init(struct sh_eth_private *mdp)
 }
 
 /* MDIO bus release function */
-static int sh_mdio_release(struct net_device *ndev)
+static int sh_mdio_release(struct sh_eth_private *mdp)
 {
-	struct mii_bus *bus = dev_get_drvdata(&ndev->dev);
-
 	/* unregister mdio bus */
-	mdiobus_unregister(bus);
-
-	/* remove mdio bus info from net_device */
-	dev_set_drvdata(&ndev->dev, NULL);
+	mdiobus_unregister(mdp->mii_bus);
 
 	/* free bitbang info */
-	free_mdio_bitbang(bus);
+	free_mdio_bitbang(mdp->mii_bus);
 
 	return 0;
 }
 
 /* MDIO bus init function */
-static int sh_mdio_init(struct net_device *ndev, int id,
+static int sh_mdio_init(struct sh_eth_private *mdp,
 			struct sh_eth_plat_data *pd)
 {
 	int ret, i;
 	struct bb_info *bitbang;
-	struct sh_eth_private *mdp = netdev_priv(ndev);
+	struct platform_device *pdev = mdp->pdev;
+	struct device *dev = &mdp->pdev->dev;
 
 	/* create bit control struct for PHY */
-	bitbang = devm_kzalloc(&ndev->dev, sizeof(struct bb_info),
-			       GFP_KERNEL);
-	if (!bitbang) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	bitbang = devm_kzalloc(dev, sizeof(struct bb_info), GFP_KERNEL);
+	if (!bitbang)
+		return -ENOMEM;
 
 	/* bitbang init */
 	bitbang->addr = mdp->addr + mdp->reg_offset[PIR];
@@ -2619,44 +2627,42 @@ static int sh_mdio_init(struct net_device *ndev, int id,
 
 	/* MII controller setting */
 	mdp->mii_bus = alloc_mdio_bitbang(&bitbang->ctrl);
-	if (!mdp->mii_bus) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	if (!mdp->mii_bus)
+		return -ENOMEM;
 
 	/* Hook up MII support for ethtool */
 	mdp->mii_bus->name = "sh_mii";
-	mdp->mii_bus->parent = &ndev->dev;
+	mdp->mii_bus->parent = dev;
 	snprintf(mdp->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
-		 mdp->pdev->name, id);
+		 pdev->name, pdev->id);
 
 	/* PHY IRQ */
-	mdp->mii_bus->irq = devm_kzalloc(&ndev->dev,
-					 sizeof(int) * PHY_MAX_ADDR,
+	mdp->mii_bus->irq = devm_kzalloc(dev, sizeof(int) * PHY_MAX_ADDR,
 					 GFP_KERNEL);
 	if (!mdp->mii_bus->irq) {
 		ret = -ENOMEM;
 		goto out_free_bus;
 	}
 
-	for (i = 0; i < PHY_MAX_ADDR; i++)
-		mdp->mii_bus->irq[i] = PHY_POLL;
-	if (pd->phy_irq > 0)
-		mdp->mii_bus->irq[pd->phy] = pd->phy_irq;
+	/* register MDIO bus */
+	if (dev->of_node) {
+		ret = of_mdiobus_register(mdp->mii_bus, dev->of_node);
+	} else {
+		for (i = 0; i < PHY_MAX_ADDR; i++)
+			mdp->mii_bus->irq[i] = PHY_POLL;
+		if (pd->phy_irq > 0)
+			mdp->mii_bus->irq[pd->phy] = pd->phy_irq;
 
-	/* register mdio bus */
-	ret = mdiobus_register(mdp->mii_bus);
+		ret = mdiobus_register(mdp->mii_bus);
+	}
+
 	if (ret)
 		goto out_free_bus;
-
-	dev_set_drvdata(&ndev->dev, mdp->mii_bus);
 
 	return 0;
 
 out_free_bus:
 	free_mdio_bitbang(mdp->mii_bus);
-
-out:
 	return ret;
 }
 
@@ -2681,7 +2687,6 @@ static const u16 *sh_eth_get_register_offset(int register_type)
 		reg_offset = sh_eth_offset_fast_sh3_sh2;
 		break;
 	default:
-		pr_err("Unknown register type (%d)\n", register_type);
 		break;
 	}
 
@@ -2720,7 +2725,6 @@ static struct sh_eth_plat_data *sh_eth_parse_dt(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
 	struct sh_eth_plat_data *pdata;
-	struct device_node *phy;
 	const char *mac_addr;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
@@ -2728,11 +2732,6 @@ static struct sh_eth_plat_data *sh_eth_parse_dt(struct device *dev)
 		return NULL;
 
 	pdata->phy_interface = of_get_phy_mode(np);
-
-	phy = of_parse_phandle(np, "phy-handle", 0);
-	if (of_property_read_u32(phy, "reg", &pdata->phy))
-		return NULL;
-	pdata->phy_irq = irq_of_parse_and_map(phy, 0);
 
 	mac_addr = of_get_mac_address(np);
 	if (mac_addr)
@@ -2776,15 +2775,12 @@ static int sh_eth_drv_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (unlikely(res == NULL)) {
 		dev_err(&pdev->dev, "invalid resource\n");
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	ndev = alloc_etherdev(sizeof(struct sh_eth_private));
-	if (!ndev) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	if (!ndev)
+		return -ENOMEM;
 
 	/* The sh Ether-specific entries in the device structure. */
 	ndev->base_addr = res->start;
@@ -2843,6 +2839,12 @@ static int sh_eth_drv_probe(struct platform_device *pdev)
 		mdp->cd = (struct sh_eth_cpu_data *)match->data;
 	}
 	mdp->reg_offset = sh_eth_get_register_offset(mdp->cd->register_type);
+	if (!mdp->reg_offset) {
+		dev_err(&pdev->dev, "Unknown register type (%d)\n",
+			mdp->cd->register_type);
+		ret = -EINVAL;
+		goto out_release;
+	}
 	sh_eth_set_default_cpu_data(mdp->cd);
 
 	/* set function */
@@ -2888,17 +2890,19 @@ static int sh_eth_drv_probe(struct platform_device *pdev)
 		}
 	}
 
+	/* MDIO bus init */
+	ret = sh_mdio_init(mdp, pd);
+	if (ret) {
+		dev_err(&ndev->dev, "failed to initialise MDIO\n");
+		goto out_release;
+	}
+
 	netif_napi_add(ndev, &mdp->napi, sh_eth_poll, 64);
 
 	/* network device register */
 	ret = register_netdev(ndev);
 	if (ret)
 		goto out_napi_del;
-
-	/* mdio bus init */
-	ret = sh_mdio_init(ndev, pdev->id, pd);
-	if (ret)
-		goto out_unregister;
 
 	/* print device information */
 	pr_info("Base address at 0x%x, %pM, IRQ %d.\n",
@@ -2908,18 +2912,15 @@ static int sh_eth_drv_probe(struct platform_device *pdev)
 
 	return ret;
 
-out_unregister:
-	unregister_netdev(ndev);
-
 out_napi_del:
 	netif_napi_del(&mdp->napi);
+	sh_mdio_release(mdp);
 
 out_release:
 	/* net_dev free */
 	if (ndev)
 		free_netdev(ndev);
 
-out:
 	return ret;
 }
 
@@ -2928,9 +2929,9 @@ static int sh_eth_drv_remove(struct platform_device *pdev)
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct sh_eth_private *mdp = netdev_priv(ndev);
 
-	sh_mdio_release(ndev);
 	unregister_netdev(ndev);
 	netif_napi_del(&mdp->napi);
+	sh_mdio_release(mdp);
 	pm_runtime_disable(&pdev->dev);
 	free_netdev(ndev);
 	platform_set_drvdata(pdev, NULL);

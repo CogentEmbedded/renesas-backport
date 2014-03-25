@@ -17,8 +17,9 @@
 #include <asm/smp_scu.h>
 #include <mach/common.h>
 
-static int shmobile_smp_scu_notifier_call(struct notifier_block *nfb,
-					  unsigned long action, void *hcpu)
+static int __cpuinit shmobile_smp_scu_notifier_call(struct notifier_block *nfb,
+						    unsigned long action,
+						    void *hcpu)
 {
 	unsigned int cpu = (long)hcpu;
 
@@ -33,7 +34,7 @@ static int shmobile_smp_scu_notifier_call(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block shmobile_smp_scu_notifier = {
+static struct notifier_block shmobile_smp_scu_notifier __cpuinitdata = {
 	.notifier_call = shmobile_smp_scu_notifier_call,
 };
 
@@ -52,7 +53,7 @@ void __init shmobile_smp_scu_prepare_cpus(unsigned int max_cpus)
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
-void shmobile_smp_scu_cpu_die(unsigned int cpu)
+void __cpuinit shmobile_smp_scu_cpu_die(unsigned int cpu)
 {
 	/* For this particular CPU deregister boot vector */
 	shmobile_smp_hook(cpu, 0, 0);
