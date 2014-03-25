@@ -24,6 +24,8 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/cache.h>
+#include <linux/dma-mapping.h>
+#include <linux/dmaengine.h>
 #include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
@@ -537,6 +539,120 @@ static void spi_set_cs(struct spi_device *spi, bool enable)
 		spi->master->set_cs(spi, !enable);
 }
 
+static int spi_map_msg(struct spi_master *master, struct spi_message *msg)
+{
+	struct device *dev = master->dev.parent;
+	struct device *tx_dev, *rx_dev;
+	struct spi_transfer *xfer;
+	void *tmp;
+	size_t max_tx, max_rx;
+
+	if (master->flags & (SPI_MASTER_MUST_RX | SPI_MASTER_MUST_TX)) {
+		max_tx = 0;
+		max_rx = 0;
+
+		list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+			if ((master->flags & SPI_MASTER_MUST_TX) &&
+			    !xfer->tx_buf)
+				max_tx = max(xfer->len, max_tx);
+			if ((master->flags & SPI_MASTER_MUST_RX) &&
+			    !xfer->rx_buf)
+				max_rx = max(xfer->len, max_rx);
+		}
+
+		if (max_tx) {
+			tmp = krealloc(master->dummy_tx, max_tx,
+				       GFP_KERNEL | GFP_DMA);
+			if (!tmp)
+				return -ENOMEM;
+			master->dummy_tx = tmp;
+			memset(tmp, 0, max_tx);
+		}
+
+		if (max_rx) {
+			tmp = krealloc(master->dummy_rx, max_rx,
+				       GFP_KERNEL | GFP_DMA);
+			if (!tmp)
+				return -ENOMEM;
+			master->dummy_rx = tmp;
+		}
+
+		if (max_tx || max_rx) {
+			list_for_each_entry(xfer, &msg->transfers,
+					    transfer_list) {
+				if (!xfer->tx_buf)
+					xfer->tx_buf = master->dummy_tx;
+				if (!xfer->rx_buf)
+					xfer->rx_buf = master->dummy_rx;
+			}
+		}
+	}
+
+	if (msg->is_dma_mapped || !master->can_dma)
+		return 0;
+
+	tx_dev = &master->dma_tx->dev->device;
+	rx_dev = &master->dma_rx->dev->device;
+
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		if (!master->can_dma(master, msg->spi, xfer))
+			continue;
+
+		if (xfer->tx_buf != NULL) {
+			xfer->tx_dma = dma_map_single(tx_dev,
+						      (void *)xfer->tx_buf,
+						      xfer->len,
+						      DMA_TO_DEVICE);
+			if (dma_mapping_error(dev, xfer->tx_dma)) {
+				dev_err(dev, "dma_map_single Tx failed\n");
+				return -ENOMEM;
+			}
+		}
+
+		if (xfer->rx_buf != NULL) {
+			xfer->rx_dma = dma_map_single(rx_dev,
+						      xfer->rx_buf, xfer->len,
+						      DMA_FROM_DEVICE);
+			if (dma_mapping_error(dev, xfer->rx_dma)) {
+				dev_err(dev, "dma_map_single Rx failed\n");
+				dma_unmap_single(tx_dev, xfer->tx_dma,
+						 xfer->len, DMA_TO_DEVICE);
+				return -ENOMEM;
+			}
+		}
+	}
+
+	master->cur_msg_mapped = true;
+
+	return 0;
+}
+
+static int spi_unmap_msg(struct spi_master *master, struct spi_message *msg)
+{
+	struct spi_transfer *xfer;
+	struct device *tx_dev, *rx_dev;
+
+	if (!master->cur_msg_mapped || msg->is_dma_mapped || !master->can_dma)
+		return 0;
+
+	tx_dev = &master->dma_tx->dev->device;
+	rx_dev = &master->dma_rx->dev->device;
+
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		if (!master->can_dma(master, msg->spi, xfer))
+			continue;
+
+		if (xfer->rx_buf)
+			dma_unmap_single(rx_dev, xfer->rx_dma, xfer->len,
+					 DMA_FROM_DEVICE);
+		if (xfer->tx_buf)
+			dma_unmap_single(tx_dev, xfer->tx_dma, xfer->len,
+					 DMA_TO_DEVICE);
+	}
+
+	return 0;
+}
+
 /*
  * spi_transfer_one_message - Default implementation of transfer_one_message()
  *
@@ -641,10 +757,18 @@ static void spi_pump_messages(struct kthread_work *work)
 		}
 		master->busy = false;
 		spin_unlock_irqrestore(&master->queue_lock, flags);
+		kfree(master->dummy_rx);
+		master->dummy_rx = NULL;
+		kfree(master->dummy_tx);
+		master->dummy_tx = NULL;
 		if (master->unprepare_transfer_hardware &&
 		    master->unprepare_transfer_hardware(master))
 			dev_err(&master->dev,
 				"failed to unprepare transfer hardware\n");
+		if (master->auto_runtime_pm) {
+			pm_runtime_mark_last_busy(master->dev.parent);
+			pm_runtime_put_autosuspend(master->dev.parent);
+		}
 		trace_spi_master_idle(master);
 		return;
 	}
@@ -665,6 +789,15 @@ static void spi_pump_messages(struct kthread_work *work)
 		master->busy = true;
 	spin_unlock_irqrestore(&master->queue_lock, flags);
 
+	if (!was_busy && master->auto_runtime_pm) {
+		ret = pm_runtime_get_sync(master->dev.parent);
+		if (ret < 0) {
+			dev_err(&master->dev, "Failed to power device: %d\n",
+				ret);
+			return;
+		}
+	}
+
 	if (!was_busy)
 		trace_spi_master_busy(master);
 
@@ -673,6 +806,9 @@ static void spi_pump_messages(struct kthread_work *work)
 		if (ret) {
 			dev_err(&master->dev,
 				"failed to prepare transfer hardware\n");
+
+			if (master->auto_runtime_pm)
+				pm_runtime_put(master->dev.parent);
 			return;
 		}
 	}
@@ -689,6 +825,13 @@ static void spi_pump_messages(struct kthread_work *work)
 			return;
 		}
 		master->cur_msg_prepared = true;
+	}
+
+	ret = spi_map_msg(master, master->cur_msg);
+	if (ret) {
+		master->cur_msg->status = ret;
+		spi_finalize_current_message(master);
+		return;
 	}
 
 	ret = master->transfer_one_message(master, master->cur_msg);
@@ -780,6 +923,8 @@ void spi_finalize_current_message(struct spi_master *master)
 
 	queue_kthread_work(&master->kworker, &master->pump_messages);
 	spin_unlock_irqrestore(&master->queue_lock, flags);
+
+	spi_unmap_msg(master, mesg);
 
 	if (master->cur_msg_prepared && master->unprepare_message) {
 		ret = master->unprepare_message(master, mesg);
@@ -995,47 +1140,43 @@ static void of_register_spi_devices(struct spi_master *master)
 
 		/* Device DUAL/QUAD mode */
 		prop = of_get_property(nc, "spi-tx-nbits", &len);
-		if (!prop || len < sizeof(*prop)) {
-			dev_err(&master->dev, "%s has no 'spi-tx-nbits' property\n",
-				nc->full_name);
-			spi_dev_put(spi);
-			continue;
-		}
-		switch (be32_to_cpup(prop)) {
-		case SPI_NBITS_SINGLE:
-			break;
-		case SPI_NBITS_DUAL:
-			spi->mode |= SPI_TX_DUAL;
-			break;
-		case SPI_NBITS_QUAD:
-			spi->mode |= SPI_TX_QUAD;
-			break;
-		default:
-			dev_err(&master->dev, "spi-tx-nbits value is not supported\n");
-			spi_dev_put(spi);
-			continue;
+		if (prop && len == sizeof(*prop)) {
+			switch (be32_to_cpup(prop)) {
+			case SPI_NBITS_SINGLE:
+				break;
+			case SPI_NBITS_DUAL:
+				spi->mode |= SPI_TX_DUAL;
+				break;
+			case SPI_NBITS_QUAD:
+				spi->mode |= SPI_TX_QUAD;
+				break;
+			default:
+				dev_err(&master->dev,
+					"spi-tx-nbits %d not supported\n",
+					be32_to_cpup(prop));
+				spi_dev_put(spi);
+				continue;
+			}
 		}
 
 		prop = of_get_property(nc, "spi-rx-nbits", &len);
-		if (!prop || len < sizeof(*prop)) {
-			dev_err(&master->dev, "%s has no 'spi-rx-nbits' property\n",
-				nc->full_name);
-			spi_dev_put(spi);
-			continue;
-		}
-		switch (be32_to_cpup(prop)) {
-		case SPI_NBITS_SINGLE:
-			break;
-		case SPI_NBITS_DUAL:
-			spi->mode |= SPI_RX_DUAL;
-			break;
-		case SPI_NBITS_QUAD:
-			spi->mode |= SPI_RX_QUAD;
-			break;
-		default:
-			dev_err(&master->dev, "spi-rx-nbits value is not supported\n");
-			spi_dev_put(spi);
-			continue;
+		if (prop && len == sizeof(*prop)) {
+			switch (be32_to_cpup(prop)) {
+			case SPI_NBITS_SINGLE:
+				break;
+			case SPI_NBITS_DUAL:
+				spi->mode |= SPI_RX_DUAL;
+				break;
+			case SPI_NBITS_QUAD:
+				spi->mode |= SPI_RX_QUAD;
+				break;
+			default:
+				dev_err(&master->dev,
+					"spi-rx-nbits %d not supported\n",
+					be32_to_cpup(prop));
+				spi_dev_put(spi);
+				continue;
+			}
 		}
 
 		/* Device speed */
