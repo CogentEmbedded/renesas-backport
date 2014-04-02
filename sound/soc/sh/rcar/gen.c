@@ -66,6 +66,7 @@ static int rsnd_regmap_read32(void *context,
 }
 
 static struct regmap_bus rsnd_regmap_bus = {
+	.fast_io			= true,
 	.write				= rsnd_regmap_write32,
 	.read				= rsnd_regmap_read32,
 	.reg_format_endian_default	= REGMAP_ENDIAN_NATIVE,
@@ -359,12 +360,27 @@ static int rsnd_gen1_probe(struct platform_device *pdev,
 /*
  *		Gen
  */
+static void rsnd_of_parse_gen(struct platform_device *pdev,
+			      const struct rsnd_of_data *of_data,
+			      struct rsnd_priv *priv)
+{
+	struct rcar_snd_info *info = priv->info;
+
+	if (!of_data)
+		return;
+
+	info->flags = of_data->flags;
+}
+
 int rsnd_gen_probe(struct platform_device *pdev,
+		   const struct rsnd_of_data *of_data,
 		   struct rsnd_priv *priv)
 {
 	struct device *dev = rsnd_priv_to_dev(priv);
 	struct rsnd_gen *gen;
 	int ret;
+
+	rsnd_of_parse_gen(pdev, of_data, priv);
 
 	gen = devm_kzalloc(dev, sizeof(*gen), GFP_KERNEL);
 	if (!gen) {
