@@ -334,6 +334,17 @@ static const struct resource sh_msiof3_resources[] __initconst = {
 				  &sh_msiof_info[idx],		\
 				  sizeof(struct sh_msiof_spi_info))
 
+/* POWERVR */
+static const struct resource powervr_resources[] __initconst = {
+	DEFINE_RES_MEM(0xfd000000, 0x10000),
+	DEFINE_RES_IRQ(gic_spi(119)),
+};
+
+#define r8a7790_register_pvrsrvkm()					\
+	platform_device_register_simple("pvrsrvkm", -1,			\
+					powervr_resources,		\
+					ARRAY_SIZE(powervr_resources))
+
 void __init r8a7790_add_dt_devices(void)
 {
 	r8a7790_register_cmt(00);
@@ -341,6 +352,10 @@ void __init r8a7790_add_dt_devices(void)
 
 void __init r8a7790_add_standard_devices(void)
 {
+	r8a7790_pm_init();
+
+	r8a7790_init_pm_domains();
+
 	r8a7790_register_scif(0);
 	r8a7790_register_scif(1);
 	r8a7790_register_scif(2);
@@ -364,6 +379,7 @@ void __init r8a7790_add_standard_devices(void)
 	r8a7790_register_msiof(1);
 	r8a7790_register_msiof(2);
 	r8a7790_register_msiof(3);
+	r8a7790_register_pvrsrvkm();
 }
 
 #ifdef CONFIG_USE_OF

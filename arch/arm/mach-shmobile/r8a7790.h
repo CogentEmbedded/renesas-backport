@@ -1,6 +1,20 @@
 #ifndef __ASM_R8A7790_H__
 #define __ASM_R8A7790_H__
 
+#include <linux/pm_domain.h>
+
+#include "pm-rcar.h"
+
+struct r8a7790_pm_domain {
+	struct generic_pm_domain genpd;
+	struct rcar_sysc_ch ch;
+};
+
+static inline struct rcar_sysc_ch *to_r8a7790_ch(struct generic_pm_domain *d)
+{
+	return &container_of(d, struct r8a7790_pm_domain, genpd)->ch;
+}
+
 /* DMA slave IDs */
 enum {
 	RCAR_DMA_SLAVE_INVALID,
@@ -32,5 +46,11 @@ void r8a7790_clock_init(void);
 void r8a7790_pinmux_init(void);
 void r8a7790_pm_init(void);
 extern struct smp_operations r8a7790_smp_ops;
+
+#ifdef CONFIG_PM
+extern void __init r8a7790_init_pm_domains(void);
+#else
+static inline void r8a7790_init_pm_domains(void) {}
+#endif /* CONFIG_PM */
 
 #endif /* __ASM_R8A7790_H__ */
