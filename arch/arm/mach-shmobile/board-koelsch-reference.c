@@ -85,19 +85,26 @@ static void __init koelsch_add_du_device(void)
 
 /* Sound */
 static struct rsnd_ssi_platform_info rsnd_ssi[] = {
-	RSND_SSI(AUDIO_DMAC_SLAVE_SSI0_TX, gic_spi(370), 0),
-	RSND_SSI(AUDIO_DMAC_SLAVE_SSI1_RX, gic_spi(371), RSND_SSI_CLK_PIN_SHARE),
+	RSND_SSI(AUDIOPP_DMAC_SLAVE_SCU0_TO_SSI0, gic_spi(370), 0),
+	RSND_SSI(AUDIOPP_DMAC_SLAVE_SSI1_TO_SCU1, gic_spi(371), RSND_SSI_CLK_PIN_SHARE),
+};
+
+static struct rsnd_src_platform_info rsnd_src[2] = {
+	RSND_SRC(0, AUDIO_DMAC_SLAVE_SCU0_TX),
+	RSND_SRC(0, AUDIO_DMAC_SLAVE_SCU1_RX),
 };
 
 static struct rsnd_dai_platform_info rsnd_dai = {
-	.playback = { .ssi = &rsnd_ssi[0], },
-	.capture  = { .ssi = &rsnd_ssi[1], },
+	.playback = { .ssi = &rsnd_ssi[0], .src = &rsnd_src[0], },
+	.capture  = { .ssi = &rsnd_ssi[1], .src = &rsnd_src[1], },
 };
 
 static struct rcar_snd_info rsnd_info = {
 	.flags		= RSND_GEN2,
 	.ssi_info	= rsnd_ssi,
 	.ssi_info_nr	= ARRAY_SIZE(rsnd_ssi),
+	.src_info	= rsnd_src,
+	.src_info_nr	= ARRAY_SIZE(rsnd_src),
 	.dai_info	= &rsnd_dai,
 	.dai_info_nr	= 1,
 };
@@ -168,6 +175,8 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "lvds0", "lvds.0", "rcar-du-r8a7791" },
 	{ "ssi0", "ssi.0", "rcar_sound" },
 	{ "ssi1", "ssi.1", "rcar_sound" },
+	{ "src0", "src.0", "rcar_sound" },
+	{ "src1", "src.1", "rcar_sound" },
 };
 
 /*
@@ -183,6 +192,7 @@ static const struct clk_name clk_enables[] __initconst = {
 	{ "sdhi2", NULL, "ee160000.sd" },
 	{ "thermal", NULL, "e61f0000.thermal" },
 	{ "ssi", NULL, "rcar_sound" },
+	{ "scu", NULL, "rcar_sound" },
 	{ "dmal", NULL, "sh-dma-engine.0" },
 	{ "dmah", NULL, "sh-dma-engine.1" },
 };
