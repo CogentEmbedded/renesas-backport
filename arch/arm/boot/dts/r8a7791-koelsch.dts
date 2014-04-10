@@ -412,6 +412,12 @@
 		reg = <0x50>;
 		pagesize = <16>;
 	};
+
+	snd_codec: ak4643 {
+		#sound-dai-cells = <0>;
+		compatible = "asahi-kasei,ak4643";
+		reg = <0x12>;
+	};
 };
 
 &i2c6 {
