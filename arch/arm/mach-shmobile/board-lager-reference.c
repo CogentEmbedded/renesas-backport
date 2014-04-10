@@ -89,8 +89,8 @@ static void __init lager_add_du_device(void)
 
 /* Sound */
 static struct rsnd_ssi_platform_info rsnd_ssi[] = {
-	RSND_SSI(0, gic_spi(370), 0),
-	RSND_SSI(0, gic_spi(371), RSND_SSI_CLK_PIN_SHARE),
+	RSND_SSI(AUDIO_DMAC_SLAVE_SSI0_TX, gic_spi(370), 0),
+	RSND_SSI(AUDIO_DMAC_SLAVE_SSI1_RX, gic_spi(371), RSND_SSI_CLK_PIN_SHARE),
 };
 
 static struct rsnd_dai_platform_info rsnd_dai = {
@@ -183,6 +183,8 @@ static const struct clk_name clk_enables[] __initconst = {
 	{ "sdhi2", NULL, "ee140000.sd" },
 	{ "thermal", NULL, "e61f0000.thermal" },
 	{ "ssi", NULL, "rcar_sound" },
+	{ "dmal", NULL, "sh-dma-engine.0" },
+	{ "dmah", NULL, "sh-dma-engine.1" },
 };
 
 static void __init lager_add_standard_devices(void)
