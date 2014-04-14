@@ -235,6 +235,7 @@
 };
 
 &pfc {
+	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins &usb0_pins &usb1_pins
 			&sound_pins
 			&sound_clk_pins>;
 	pinctrl-names = "default";
