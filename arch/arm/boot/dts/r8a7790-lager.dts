@@ -378,6 +378,12 @@
 	status = "ok";
 	pinctrl-0 = <&iic2_pins>;
 	pinctrl-names = "default";
+
+	snd_codec: ak4643 {
+		#sound-dai-cells = <0>;
+		compatible = "asahi-kasei,ak4643";
+		reg = <0x12>;
+	};
 };
 
 &iic3 {
