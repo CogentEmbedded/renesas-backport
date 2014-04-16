@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include "core.h"
 #include "pinconf.h"
+#include "pinctrl-utils.h"
 
 #ifdef CONFIG_DEBUG_FS
 
@@ -46,9 +47,11 @@ static struct pin_config_item conf_items[] = {
 	PCONFDUMP(PIN_CONFIG_DRIVE_PUSH_PULL, "output drive push pull", NULL),
 	PCONFDUMP(PIN_CONFIG_DRIVE_OPEN_DRAIN, "output drive open drain", NULL),
 	PCONFDUMP(PIN_CONFIG_DRIVE_OPEN_SOURCE, "output drive open source", NULL),
+	PCONFDUMP(PIN_CONFIG_DRIVE_STRENGTH, "output drive strength", "mA"),
+	PCONFDUMP(PIN_CONFIG_INPUT_ENABLE, "input enabled", NULL),
 	PCONFDUMP(PIN_CONFIG_INPUT_SCHMITT_ENABLE, "input schmitt enabled", NULL),
 	PCONFDUMP(PIN_CONFIG_INPUT_SCHMITT, "input schmitt trigger", NULL),
-	PCONFDUMP(PIN_CONFIG_INPUT_DEBOUNCE, "input debounce", "time units"),
+	PCONFDUMP(PIN_CONFIG_INPUT_DEBOUNCE, "input debounce", "usec"),
 	PCONFDUMP(PIN_CONFIG_POWER_SOURCE, "pin power source", "selector"),
 	PCONFDUMP(PIN_CONFIG_SLEW_RATE, "slew rate", NULL),
 	PCONFDUMP(PIN_CONFIG_LOW_POWER_MODE, "pin low power", "mode"),
@@ -151,22 +154,23 @@ static struct pinconf_generic_dt_params dt_params[] = {
 	{ "bias-disable", PIN_CONFIG_BIAS_DISABLE, 0 },
 	{ "bias-high-impedance", PIN_CONFIG_BIAS_HIGH_IMPEDANCE, 0 },
 	{ "bias-bus-hold", PIN_CONFIG_BIAS_BUS_HOLD, 0 },
-	{ "bias-pull-up", PIN_CONFIG_BIAS_PULL_UP, 0 },
-	{ "bias-pull-down", PIN_CONFIG_BIAS_PULL_DOWN, 0 },
-	{ "bias-pull-pin-default", PIN_CONFIG_BIAS_PULL_PIN_DEFAULT, 0 },
+	{ "bias-pull-up", PIN_CONFIG_BIAS_PULL_UP, 1 },
+	{ "bias-pull-down", PIN_CONFIG_BIAS_PULL_DOWN, 1 },
+	{ "bias-pull-pin-default", PIN_CONFIG_BIAS_PULL_PIN_DEFAULT, 1 },
 	{ "drive-push-pull", PIN_CONFIG_DRIVE_PUSH_PULL, 0 },
 	{ "drive-open-drain", PIN_CONFIG_DRIVE_OPEN_DRAIN, 0 },
 	{ "drive-open-source", PIN_CONFIG_DRIVE_OPEN_SOURCE, 0 },
 	{ "drive-strength", PIN_CONFIG_DRIVE_STRENGTH, 0 },
+	{ "input-enable", PIN_CONFIG_INPUT_ENABLE, 1 },
+	{ "input-disable", PIN_CONFIG_INPUT_ENABLE, 0 },
 	{ "input-schmitt-enable", PIN_CONFIG_INPUT_SCHMITT_ENABLE, 1 },
 	{ "input-schmitt-disable", PIN_CONFIG_INPUT_SCHMITT_ENABLE, 0 },
-	{ "input-schmitt", PIN_CONFIG_INPUT_SCHMITT, 0 },
 	{ "input-debounce", PIN_CONFIG_INPUT_DEBOUNCE, 0 },
-	{ "power-source", PIN_CONFIG_POWER_SOURCE, 0 },
-	{ "slew-rate", PIN_CONFIG_SLEW_RATE, 0 },
-	{ "low-power-mode", PIN_CONFIG_LOW_POWER_MODE, 0 },
+	{ "low-power-enable", PIN_CONFIG_LOW_POWER_MODE, 1 },
+	{ "low-power-disable", PIN_CONFIG_LOW_POWER_MODE, 0 },
 	{ "output-low", PIN_CONFIG_OUTPUT, 0, },
 	{ "output-high", PIN_CONFIG_OUTPUT, 1, },
+	{ "slew-rate", PIN_CONFIG_SLEW_RATE, 0},
 };
 
 /**
@@ -180,7 +184,7 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 				    unsigned long **configs,
 				    unsigned int *nconfigs)
 {
-	unsigned long cfg[ARRAY_SIZE(dt_params)];
+	unsigned long *cfg;
 	unsigned int ncfg = 0;
 	int ret;
 	int i;
@@ -188,6 +192,11 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 
 	if (!np)
 		return -EINVAL;
+
+	/* allocate a temporary array big enough to hold one of each option */
+	cfg = kzalloc(sizeof(*cfg) * ARRAY_SIZE(dt_params), GFP_KERNEL);
+	if (!cfg)
+		return -ENOMEM;
 
 	for (i = 0; i < ARRAY_SIZE(dt_params); i++) {
 		struct pinconf_generic_dt_params *par = &dt_params[i];
@@ -206,16 +215,124 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 		ncfg++;
 	}
 
+	ret = 0;
+
+	/* no configs found at all */
+	if (ncfg == 0) {
+		*configs = NULL;
+		*nconfigs = 0;
+		goto out;
+	}
+
 	/*
 	 * Now limit the number of configs to the real number of
 	 * found properties.
 	 */
 	*configs = kzalloc(ncfg * sizeof(unsigned long), GFP_KERNEL);
-	if (!*configs)
-		return -ENOMEM;
+	if (!*configs) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
-	memcpy(*configs, &cfg, ncfg * sizeof(unsigned long));
+	memcpy(*configs, cfg, ncfg * sizeof(unsigned long));
 	*nconfigs = ncfg;
+
+out:
+	kfree(cfg);
+	return ret;
+}
+
+int pinconf_generic_dt_subnode_to_map(struct pinctrl_dev *pctldev,
+		struct device_node *np, struct pinctrl_map **map,
+		unsigned *reserved_maps, unsigned *num_maps)
+{
+	int ret;
+	const char *function;
+	struct device *dev = pctldev->dev;
+	unsigned long *configs = NULL;
+	unsigned num_configs = 0;
+	unsigned reserve;
+	struct property *prop;
+	const char *group;
+
+	ret = of_property_read_string(np, "function", &function);
+	if (ret < 0) {
+		/* EINVAL=missing, which is fine since it's optional */
+		if (ret != -EINVAL)
+			dev_err(dev, "could not parse property function\n");
+		function = NULL;
+	}
+
+	ret = pinconf_generic_parse_dt_config(np, &configs, &num_configs);
+	if (ret < 0) {
+		dev_err(dev, "could not parse node property\n");
+		return ret;
+	}
+
+	reserve = 0;
+	if (function != NULL)
+		reserve++;
+	if (num_configs)
+		reserve++;
+	ret = of_property_count_strings(np, "pins");
+	if (ret < 0) {
+		dev_err(dev, "could not parse property pins\n");
+		goto exit;
+	}
+	reserve *= ret;
+
+	ret = pinctrl_utils_reserve_map(pctldev, map, reserved_maps,
+			num_maps, reserve);
+	if (ret < 0)
+		goto exit;
+
+	of_property_for_each_string(np, "pins", prop, group) {
+		if (function) {
+			ret = pinctrl_utils_add_map_mux(pctldev, map,
+					reserved_maps, num_maps, group,
+					function);
+			if (ret < 0)
+				goto exit;
+		}
+
+		if (num_configs) {
+			ret = pinctrl_utils_add_map_configs(pctldev, map,
+					reserved_maps, num_maps, group, configs,
+					num_configs, PIN_MAP_TYPE_CONFIGS_PIN);
+			if (ret < 0)
+				goto exit;
+		}
+	}
+	ret = 0;
+
+exit:
+	kfree(configs);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pinconf_generic_dt_subnode_to_map);
+
+int pinconf_generic_dt_node_to_map(struct pinctrl_dev *pctldev,
+		struct device_node *np_config, struct pinctrl_map **map,
+		unsigned *num_maps)
+{
+	unsigned reserved_maps;
+	struct device_node *np;
+	int ret;
+
+	reserved_maps = 0;
+	*map = NULL;
+	*num_maps = 0;
+
+	for_each_child_of_node(np_config, np) {
+		ret = pinconf_generic_dt_subnode_to_map(pctldev, np, map,
+						&reserved_maps, num_maps);
+		if (ret < 0) {
+			pinctrl_utils_dt_free_map(pctldev, *map, *num_maps);
+			return ret;
+		}
+	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(pinconf_generic_dt_node_to_map);
+
 #endif
