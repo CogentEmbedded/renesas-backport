@@ -1780,19 +1780,32 @@ static const unsigned int du_clk_out_1_mux[] = {
 	DU1_DOTCLKOUT1_MARK
 };
 static const unsigned int du_sync_pins[] = {
-	/* EXVSYNC/VSYNC, EXHSYNC/HSYNC, EXDISP/EXODDF/EXCDE */
-	RCAR_GP_PIN(3, 29), RCAR_GP_PIN(3, 28), RCAR_GP_PIN(3, 27),
+	/* EXVSYNC/VSYNC, EXHSYNC/HSYNC */
+	RCAR_GP_PIN(3, 28), RCAR_GP_PIN(3, 27),
 };
 static const unsigned int du_sync_mux[] = {
-	DU1_EXODDF_DU1_ODDF_DISP_CDE_MARK,
 	DU1_EXVSYNC_DU1_VSYNC_MARK, DU1_EXHSYNC_DU1_HSYNC_MARK
 };
-static const unsigned int du_cde_disp_pins[] = {
-	/* CDE DISP */
-	RCAR_GP_PIN(3, 31), RCAR_GP_PIN(3, 30),
+static const unsigned int du_oddf_pins[] = {
+	/* EXDISP/EXODDF/EXCDE */
+	RCAR_GP_PIN(3, 29),
 };
-static const unsigned int du_cde_disp_mux[] = {
-	DU1_CDE_MARK, DU1_DISP_MARK
+static const unsigned int du_oddf_mux[] = {
+	DU1_EXODDF_DU1_ODDF_DISP_CDE_MARK,
+};
+static const unsigned int du_cde_pins[] = {
+	/* CDE */
+	RCAR_GP_PIN(3, 31),
+};
+static const unsigned int du_cde_mux[] = {
+	DU1_CDE_MARK,
+};
+static const unsigned int du_disp_pins[] = {
+	/* DISP */
+	RCAR_GP_PIN(3, 30),
+};
+static const unsigned int du_disp_mux[] = {
+	DU1_DISP_MARK,
 };
 static const unsigned int du0_clk_in_pins[] = {
 	/* CLKIN */
@@ -3861,7 +3874,9 @@ static const struct sh_pfc_pin_group pinmux_groups[] = {
 	SH_PFC_PIN_GROUP(du_clk_out_0),
 	SH_PFC_PIN_GROUP(du_clk_out_1),
 	SH_PFC_PIN_GROUP(du_sync),
-	SH_PFC_PIN_GROUP(du_cde_disp),
+	SH_PFC_PIN_GROUP(du_oddf),
+	SH_PFC_PIN_GROUP(du_cde),
+	SH_PFC_PIN_GROUP(du_disp),
 	SH_PFC_PIN_GROUP(du0_clk_in),
 	SH_PFC_PIN_GROUP(du1_clk_in),
 	SH_PFC_PIN_GROUP(du1_clk_in_b),
@@ -4146,7 +4161,9 @@ static const char * const du_groups[] = {
 	"du_clk_out_0",
 	"du_clk_out_1",
 	"du_sync",
-	"du_cde_disp",
+	"du_oddf",
+	"du_cde",
+	"du_disp",
 };
 
 static const char * const du0_groups[] = {
@@ -5663,7 +5680,7 @@ static const struct pinmux_cfg_reg pinmux_config_regs[] = {
 		/* SEL_SCIF3 [2] */
 		FN_SEL_SCIF3_0, FN_SEL_SCIF3_1, FN_SEL_SCIF3_2, FN_SEL_SCIF3_3,
 		/* SEL_IEB [2] */
-		FN_SEL_IEB_0, FN_SEL_IEB_1, FN_SEL_IEB_2,
+		FN_SEL_IEB_0, FN_SEL_IEB_1, FN_SEL_IEB_2, 0,
 		/* SEL_MMC [1] */
 		FN_SEL_MMC_0, FN_SEL_MMC_1,
 		/* SEL_SCIF5 [1] */
