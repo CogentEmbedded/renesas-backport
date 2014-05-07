@@ -76,6 +76,9 @@ struct rcar_du_encoder_data {
 struct rcar_du_platform_data {
 	struct rcar_du_encoder_data *encoders;
 	unsigned int num_encoders;
+#ifdef CONFIG_DRM_FBDEV_CRTC
+	unsigned int fbdev_crtc;
+#endif
 };
 
 #endif /* __RCAR_DU_H__ */
