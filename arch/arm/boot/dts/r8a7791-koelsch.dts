@@ -176,7 +176,7 @@
 };
 
 &pfc {
-	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins
+	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins &hscif1_pins
 			&sound_pins
 			&sound_clk_pins
 			&sdhi0_pins &sdhi1_pins &sdhi2_pins>;
@@ -237,6 +237,17 @@
 				 "msiof0_tx";
 		renesas,function = "msiof0";
 	};
+
+	usb0_pins: usb0 {
+		renesas,groups = "usb0";
+		renesas,function = "usb0";
+	};
+
+	usb1_pins: usb1 {
+		renesas,groups = "usb1";
+		renesas,function = "usb1";
+	};
+
 	sound_pins: sound {
 		renesas,groups = "ssi0129_ctrl", "ssi0_data", "ssi1_data";
 		renesas,function = "ssi";
