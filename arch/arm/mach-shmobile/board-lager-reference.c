@@ -21,6 +21,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/gpio.h>
 #include <linux/init.h>
+#include <linux/mfd/tmio.h>
+#include <linux/mmc/host.h>
+#include <linux/mmc/sh_mobile_sdhi.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/rcar-du.h>
@@ -36,6 +39,40 @@
 #include <asm/mach/arch.h>
 #include <sound/rcar_snd.h>
 #include <sound/simple_card.h>
+
+/* SDHI0 */
+static struct sh_mobile_sdhi_info sdhi0_info __initdata = {
+	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
+			  MMC_CAP_POWER_OFF_CARD,
+	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
+	.tmio_flags	= TMIO_MMC_HAS_IDLE_WAIT |
+			  TMIO_MMC_WRPROTECT_DISABLE,
+	/* FIXME
+	 * GPIO and GPIO regulator came from DT */
+	.tmio_ocr_mask	= MMC_VDD_32_33 | MMC_VDD_33_34,
+};
+
+static struct resource sdhi0_resources[] __initdata = {
+	DEFINE_RES_MEM(0xee100000, 0x200),
+	DEFINE_RES_IRQ(gic_spi(165)),
+};
+
+/* SDHI2 */
+static struct sh_mobile_sdhi_info sdhi2_info __initdata = {
+	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
+			  MMC_CAP_POWER_OFF_CARD,
+	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
+	.tmio_flags	= TMIO_MMC_HAS_IDLE_WAIT |
+			  TMIO_MMC_WRPROTECT_DISABLE,
+	/* FIXME
+	 * GPIO and GPIO regulator came from DT */
+	.tmio_ocr_mask	= MMC_VDD_32_33 | MMC_VDD_33_34,
+};
+
+static struct resource sdhi2_resources[] __initdata = {
+	DEFINE_RES_MEM(0xee140000, 0x100),
+	DEFINE_RES_IRQ(gic_spi(167)),
+};
 
 /* DU */
 static struct rcar_du_encoder_data lager_du_encoders[] = {
@@ -205,8 +242,8 @@ static const struct clk_name clk_enables[] __initconst = {
 	{ "msiof1", NULL, "e6e10000.spi" },
 	{ "mmcif1", NULL, "ee220000.mmc" },
 	{ "qspi_mod", NULL, "e6b10000.spi" },
-	{ "sdhi0", NULL, "ee100000.sd" },
-	{ "sdhi2", NULL, "ee140000.sd" },
+	{ "sdhi0", NULL, "sh_mobile_sdhi.0" },
+	{ "sdhi2", NULL, "sh_mobile_sdhi.2" },
 	{ "thermal", NULL, "e61f0000.thermal" },
 	{ "hsusb", NULL, "renesas_usbhs" },
 	{ "ehci", NULL, "pci-rcar-gen2.1" },
@@ -493,6 +530,17 @@ static void __init lager_add_vsp1_devices(void)
 	}
 }
 
+static void __init lager_add_sdhi_devices(void)
+{
+	platform_device_register_resndata(&platform_bus, "sh_mobile_sdhi", 0,
+					  sdhi0_resources, ARRAY_SIZE(sdhi0_resources),
+					  &sdhi0_info, sizeof(struct sh_mobile_sdhi_info));
+	platform_device_register_resndata(&platform_bus, "sh_mobile_sdhi", 2,
+					  sdhi2_resources, ARRAY_SIZE(sdhi2_resources),
+					  &sdhi2_info, sizeof(struct sh_mobile_sdhi_info));
+
+}
+
 static void __init lager_add_standard_devices(void)
 {
 	shmobile_clk_workaround(clk_names, ARRAY_SIZE(clk_names), false);
@@ -511,6 +559,7 @@ static void __init lager_add_standard_devices(void)
 	lager_add_usb2_device();
 	lager_add_rsnd_device();
 	lager_add_vsp1_devices();
+	lager_add_sdhi_devices();
 }
 
 static const char *lager_boards_compat_dt[] __initdata = {
