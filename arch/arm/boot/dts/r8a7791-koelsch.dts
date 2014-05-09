@@ -176,7 +176,7 @@
 };
 
 &pfc {
-	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins &usb0_pins &usb1_pins
+	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins &hscif1_pins &usb0_pins &usb1_pins
 			&sound_pins
 			&sound_clk_pins
 			&sdhi0_pins &sdhi1_pins &sdhi2_pins>;
@@ -200,6 +200,11 @@
 	scif1_pins: serial1 {
 		renesas,groups = "scif1_data_d";
 		renesas,function = "scif1";
+	};
+
+	hscif1_pins: serial2 {
+		renesas,groups = "hscif1_data", "hscif1_ctrl", "hscif1_clk";
+		renesas,function = "hscif1";
 	};
 
 	ether_pins: ether {
