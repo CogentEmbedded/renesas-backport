@@ -37,6 +37,8 @@
 
 /* SDHI0 */
 static struct sh_mobile_sdhi_info sdhi0_info __initdata = {
+	.dma_slave_tx	= SYS_DMAC_SLAVE_SDHI0_TX,
+	.dma_slave_rx	= SYS_DMAC_SLAVE_SDHI0_RX,
 	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
 			  MMC_CAP_POWER_OFF_CARD,
 	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
@@ -53,6 +55,8 @@ static struct resource sdhi0_resources[] __initdata = {
 
 /* SDHI2 */
 static struct sh_mobile_sdhi_info sdhi1_info __initdata = {
+	.dma_slave_tx	= SYS_DMAC_SLAVE_SDHI2_TX,
+	.dma_slave_rx	= SYS_DMAC_SLAVE_SDHI2_RX,
 	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
 			  MMC_CAP_POWER_OFF_CARD,
 	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
@@ -69,6 +73,8 @@ static struct resource sdhi1_resources[] __initdata = {
 
 /* SDHI3 */
 static struct sh_mobile_sdhi_info sdhi2_info __initdata = {
+	.dma_slave_tx	= SYS_DMAC_SLAVE_SDHI3_TX,
+	.dma_slave_rx	= SYS_DMAC_SLAVE_SDHI3_RX,
 	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
 			  MMC_CAP_POWER_OFF_CARD,
 	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
