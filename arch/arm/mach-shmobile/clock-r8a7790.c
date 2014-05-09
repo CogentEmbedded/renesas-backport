@@ -221,7 +221,7 @@ enum {
 	MSTP522,
 	MSTP502, MSTP501,
 	MSTP315, MSTP314, MSTP313, MSTP312, MSTP311, MSTP305, MSTP304,
-	MSTP216, MSTP207, MSTP206, MSTP204, MSTP203, MSTP202,
+	MSTP219, MSTP216, MSTP207, MSTP206, MSTP204, MSTP203, MSTP202,
 	MSTP124,
 	MSTP_NR
 };
@@ -282,6 +282,7 @@ static struct clk mstp_clks[MSTP_NR] = {
 	[MSTP311] = SH_CLK_MSTP32_STS(&div6_clks[DIV6_SD3], SMSTPCR3, 11, MSTPSR3, 0), /* SDHI3 */
 	[MSTP305] = SH_CLK_MSTP32_STS(&div6_clks[DIV6_MMC1], SMSTPCR3, 5, MSTPSR3, 0), /* MMC1 */
 	[MSTP304] = SH_CLK_MSTP32_STS(&cp_clk, SMSTPCR3, 4, MSTPSR3, 0), /* TPU0 */
+	[MSTP219] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 19, MSTPSR2, 0), /* SYS-DMAC LOW */
 	[MSTP216] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 16, MSTPSR2, 0), /* SCIFB2 */
 	[MSTP207] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 7, MSTPSR2, 0), /* SCIFB1 */
 	[MSTP206] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 6, MSTPSR2, 0), /* SCIFB0 */
@@ -351,6 +352,7 @@ static struct clk_lookup lookups[] = {
 	CLKDEV_DEV_ID("rcar_thermal", &mstp_clks[MSTP522]),
 	CLKDEV_DEV_ID("sh-dma-engine.0", &mstp_clks[MSTP502]),
 	CLKDEV_DEV_ID("sh-dma-engine.1", &mstp_clks[MSTP501]),
+	CLKDEV_DEV_ID("sh-dma-engine.2", &mstp_clks[MSTP219]),
 	CLKDEV_DEV_ID("sh_mmcif.0", &mstp_clks[MSTP315]),
 	CLKDEV_DEV_ID("sh_mobile_sdhi.0", &mstp_clks[MSTP314]),
 	CLKDEV_DEV_ID("sh_mobile_sdhi.1", &mstp_clks[MSTP313]),
