@@ -175,7 +175,7 @@ enum {
 	MSTP813,
 	MSTP811, MSTP810, MSTP809,
 	MSTP726, MSTP724, MSTP723, MSTP721, MSTP720,
-	MSTP719, MSTP718, MSTP715, MSTP714,
+	MSTP719, MSTP718, MSTP717, MSTP716, MSTP715, MSTP714, MSTP713,
 	MSTP522,
 	MSTP502, MSTP501,
 	MSTP314, MSTP312, MSTP311,
@@ -209,8 +209,11 @@ static struct clk mstp_clks[MSTP_NR] = {
 	[MSTP720] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 20, MSTPSR7, 0), /* SCIF1 */
 	[MSTP719] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 19, MSTPSR7, 0), /* SCIF2 */
 	[MSTP718] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 18, MSTPSR7, 0), /* SCIF3 */
+	[MSTP717] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR7, 17, MSTPSR7, 0), /* HSCIF0 */
+	[MSTP716] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR7, 16, MSTPSR7, 0), /* HSCIF1 */
 	[MSTP715] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 15, MSTPSR7, 0), /* SCIF4 */
 	[MSTP714] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 14, MSTPSR7, 0), /* SCIF5 */
+	[MSTP713] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR7, 13, MSTPSR7, 0), /* HSCIF2 */
 	[MSTP522] = SH_CLK_MSTP32_STS(&extal_clk, SMSTPCR5, 22, MSTPSR5, 0), /* Thermal */
 	[MSTP502] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR5, 2, MSTPSR5, 0), /* Audio-DMAC low */
 	[MSTP501] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR5, 1, MSTPSR5, 0), /* Audio-DMAC hi */
@@ -265,6 +268,9 @@ static struct clk_lookup lookups[] = {
 	CLKDEV_DEV_ID("sh-sci.12", &mstp_clks[MSTP1106]), /* SCIFA3 */
 	CLKDEV_DEV_ID("sh-sci.13", &mstp_clks[MSTP1107]), /* SCIFA4 */
 	CLKDEV_DEV_ID("sh-sci.14", &mstp_clks[MSTP1108]), /* SCIFA5 */
+	CLKDEV_DEV_ID("sh-sci.15", &mstp_clks[MSTP717]), /* HSCIF0 */
+	CLKDEV_DEV_ID("sh-sci.16", &mstp_clks[MSTP716]), /* HSCIF1 */
+	CLKDEV_DEV_ID("sh-sci.17", &mstp_clks[MSTP713]), /* HSCIF2 */
 	CLKDEV_DEV_ID("sh_mobile_sdhi.0", &mstp_clks[MSTP314]),
 	CLKDEV_DEV_ID("sh_mobile_sdhi.1", &mstp_clks[MSTP312]),
 	CLKDEV_DEV_ID("sh_mobile_sdhi.2", &mstp_clks[MSTP311]),
