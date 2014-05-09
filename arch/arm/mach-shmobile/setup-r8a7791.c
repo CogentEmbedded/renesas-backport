@@ -26,6 +26,7 @@
 #include <linux/platform_data/gpio-rcar.h>
 #include <linux/platform_data/irq-renesas-irqc.h>
 #include <linux/serial_sci.h>
+#include <linux/dma-mapping.h>
 #include <linux/sh_dma.h>
 #include <linux/sh_timer.h>
 #include <mach/common.h>
@@ -61,6 +62,8 @@ static const struct sh_dmae_slave_config r8a7791_sys_dmac_slaves[] = {
 	SYS_DMAC_SLAVE(SDHI0, 16, 0xee100000, 0x60, 0x2060, 0xcd, 0xce),
 	SYS_DMAC_SLAVE(SDHI2, 16, 0xee140000, 0x30, 0x2030, 0xc1, 0xc2),
 	SYS_DMAC_SLAVE(SDHI3, 16, 0xee160000, 0x30, 0x2030, 0xd3, 0xd4),
+	SYS_DMAC_SLAVE(HSCIF0, 8, 0xe62c0000, 0xc,  0x14,   0x39, 0x3a),
+	SYS_DMAC_SLAVE(HSCIF1, 8, 0xe62c8000, 0xc,  0x14,   0x4d, 0x4e),
 };
 
 static const struct sh_dmae_channel r8a7791_sys_dmac_channels[] = {
@@ -309,11 +312,13 @@ void __init r8a7791_pinmux_init(void)
 	r8a7791_register_gpio(7);
 }
 
-#define __R8A7791_SCIF(scif_type, index, baseaddr, irq)			\
+#define __R8A7791_SCIF(scif_type, index, baseaddr, irq, dma_tx, dma_rx)\
 static struct plat_sci_port scif##index##_platform_data = {		\
 	.type		= scif_type,					\
 	.flags		= UPF_BOOT_AUTOCONF | UPF_IOREMAP,		\
 	.scscr		= SCSCR_RE | SCSCR_TE,				\
+	.dma_slave_tx	= dma_tx,					\
+	.dma_slave_rx	= dma_rx,					\
 };									\
 									\
 static struct resource scif##index##_resources[] = {			\
@@ -322,16 +327,16 @@ static struct resource scif##index##_resources[] = {			\
 }
 
 #define R8A7791_SCIF(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_SCIF, index, baseaddr, irq)
+	__R8A7791_SCIF(PORT_SCIF, index, baseaddr, irq, 0, 0)
 
 #define R8A7791_SCIFA(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_SCIFA, index, baseaddr, irq)
+	__R8A7791_SCIF(PORT_SCIFA, index, baseaddr, irq, 0, 0)
 
 #define R8A7791_SCIFB(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_SCIFB, index, baseaddr, irq)
+	__R8A7791_SCIF(PORT_SCIFB, index, baseaddr, irq, 0, 0)
 
-#define R8A7791_HSCIF(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_HSCIF, index, baseaddr, irq)
+#define R8A7791_HSCIF(index, baseaddr, irq, dma_tx, dma_rx)		\
+	__R8A7791_SCIF(PORT_HSCIF, index, baseaddr, irq, dma_tx, dma_rx)
 
 R8A7791_SCIFA(0,  0xe6c40000, gic_spi(144)); /* SCIFA0 */
 R8A7791_SCIFA(1,  0xe6c50000, gic_spi(145)); /* SCIFA1 */
@@ -348,9 +353,11 @@ R8A7791_SCIF(11,  0xe6ee8000, gic_spi(25)); /* SCIF5 */
 R8A7791_SCIFA(12, 0xe6c70000, gic_spi(29)); /* SCIFA3 */
 R8A7791_SCIFA(13, 0xe6c78000, gic_spi(30)); /* SCIFA4 */
 R8A7791_SCIFA(14, 0xe6c80000, gic_spi(31)); /* SCIFA5 */
-R8A7791_HSCIF(15, 0xe62c0000, gic_spi(154)); /* HSCIF0 */
-R8A7791_HSCIF(16, 0xe62c8000, gic_spi(155)); /* HSCIF1 */
-R8A7791_HSCIF(17, 0xe62d0000, gic_spi(21)); /* HSCIF2 */
+R8A7791_HSCIF(15, 0xe62c0000, gic_spi(154),
+	SYS_DMAC_SLAVE_HSCIF0_TX, SYS_DMAC_SLAVE_HSCIF0_RX); /* HSCIF0 */
+R8A7791_HSCIF(16, 0xe62c8000, gic_spi(155),
+	SYS_DMAC_SLAVE_HSCIF1_TX, SYS_DMAC_SLAVE_HSCIF1_RX); /* HSCIF1 */
+R8A7791_HSCIF(17, 0xe62d0000, gic_spi(21), 0, 0); /* HSCIF2 */
 
 #define r8a7791_register_scif(index)					       \
 	platform_device_register_resndata(&platform_bus, "sh-sci", index,      \
@@ -414,8 +421,13 @@ static const struct resource thermal_resources[] __initconst = {
 					thermal_resources,		\
 					ARRAY_SIZE(thermal_resources))
 
+static u64 hscif0_dmamask = DMA_BIT_MASK(32);
+static u64 hscif1_dmamask = DMA_BIT_MASK(32);
+
 void __init r8a7791_add_dt_devices(void)
 {
+	struct platform_device *pdev;
+
 	r8a7791_register_scif(0);
 	r8a7791_register_scif(1);
 	r8a7791_register_scif(2);
@@ -431,8 +443,12 @@ void __init r8a7791_add_dt_devices(void)
 	r8a7791_register_scif(12);
 	r8a7791_register_scif(13);
 	r8a7791_register_scif(14);
-	r8a7791_register_scif(15);
-	r8a7791_register_scif(16);
+	pdev = r8a7791_register_scif(15);
+	pdev->dev.dma_mask = &hscif0_dmamask;
+	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
+	pdev = r8a7791_register_scif(16);
+	pdev->dev.dma_mask = &hscif1_dmamask;
+	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	r8a7791_register_scif(17);
 	r8a7791_register_cmt(00);
 	r8a7791_register_audio_dmac(0);
