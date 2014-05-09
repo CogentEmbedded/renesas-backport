@@ -330,6 +330,9 @@ static struct resource scif##index##_resources[] = {			\
 #define R8A7791_SCIFB(index, baseaddr, irq)				\
 	__R8A7791_SCIF(PORT_SCIFB, index, baseaddr, irq)
 
+#define R8A7791_HSCIF(index, baseaddr, irq)				\
+	__R8A7791_SCIF(PORT_HSCIF, index, baseaddr, irq)
+
 R8A7791_SCIFA(0,  0xe6c40000, gic_spi(144)); /* SCIFA0 */
 R8A7791_SCIFA(1,  0xe6c50000, gic_spi(145)); /* SCIFA1 */
 R8A7791_SCIFB(2,  0xe6c20000, gic_spi(148)); /* SCIFB0 */
@@ -345,6 +348,9 @@ R8A7791_SCIF(11,  0xe6ee8000, gic_spi(25)); /* SCIF5 */
 R8A7791_SCIFA(12, 0xe6c70000, gic_spi(29)); /* SCIFA3 */
 R8A7791_SCIFA(13, 0xe6c78000, gic_spi(30)); /* SCIFA4 */
 R8A7791_SCIFA(14, 0xe6c80000, gic_spi(31)); /* SCIFA5 */
+R8A7791_HSCIF(15, 0xe62c0000, gic_spi(154)); /* HSCIF0 */
+R8A7791_HSCIF(16, 0xe62c8000, gic_spi(155)); /* HSCIF1 */
+R8A7791_HSCIF(17, 0xe62d0000, gic_spi(21)); /* HSCIF2 */
 
 #define r8a7791_register_scif(index)					       \
 	platform_device_register_resndata(&platform_bus, "sh-sci", index,      \
@@ -425,6 +431,9 @@ void __init r8a7791_add_dt_devices(void)
 	r8a7791_register_scif(12);
 	r8a7791_register_scif(13);
 	r8a7791_register_scif(14);
+	r8a7791_register_scif(15);
+	r8a7791_register_scif(16);
+	r8a7791_register_scif(17);
 	r8a7791_register_cmt(00);
 	r8a7791_register_audio_dmac(0);
 	r8a7791_register_audio_dmac(1);
