@@ -23,6 +23,8 @@
 #include <linux/kernel.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/rcar-du.h>
+#include <linux/spi/flash.h>
+#include <linux/spi/spi.h>
 
 #include <asm/mach/arch.h>
 
@@ -95,6 +97,26 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "lvds0", "lvds.0", "rcar-du-r8a7791" },
 };
 
+/* MSIOF spidev */
+static const struct spi_board_info spi_bus[] __initconst = {
+	{
+		.modalias	= "spidev",
+		.max_speed_hz	= 6000000,
+		.mode		= SPI_MODE_3,
+		.bus_num	= 1,
+		.chip_select	= 0,
+	},
+	{
+		.modalias	= "spidev",
+		.max_speed_hz	= 6000000,
+		.mode		= SPI_MODE_3,
+		.bus_num	= 2,
+		.chip_select	= 0,
+	},
+};
+
+#define koelsch_add_msiof_device spi_register_board_info
+
 static void __init koelsch_add_standard_devices(void)
 {
 	shmobile_clk_workaround(clk_names, ARRAY_SIZE(clk_names), false);
@@ -102,6 +124,7 @@ static void __init koelsch_add_standard_devices(void)
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 
 	koelsch_add_du_device();
+	koelsch_add_msiof_device(spi_bus, ARRAY_SIZE(spi_bus));
 }
 
 static const char * const koelsch_boards_compat_dt[] __initconst = {
