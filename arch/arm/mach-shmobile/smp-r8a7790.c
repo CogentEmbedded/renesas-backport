@@ -1,6 +1,7 @@
 /*
  * SMP support for r8a7790
  *
+ * Copyright (C) 2014 Renesas Electronics Corporation
  * Copyright (C) 2012-2013 Renesas Solutions Corp.
  * Copyright (C) 2012 Takashi Yoshii <takashi.yoshii.ze@renesas.com>
  *
@@ -23,12 +24,16 @@
 #include "common.h"
 #include "pm-rcar.h"
 #include "r8a7790.h"
+#include "rcar-gen2.h"
 
 #define CCI_BASE	0xf0090000
 #define CCI_SLAVE3	0x4000
 #define CCI_SLAVE4	0x5000
 #define CCI_SNOOP	0x0000
 #define CCI_STATUS	0x000c
+#define APMU		0xe6151000
+#define CA7DBGRCR	0x0180
+#define CA15DBGRCR	0x1180
 
 static struct rcar_sysc_ch r8a7790_ca15_scu = {
 	.chan_offs = 0x180, /* PWRSR5 .. PWRER5 */
@@ -43,9 +48,20 @@ static struct rcar_sysc_ch r8a7790_ca7_scu = {
 static void __init r8a7790_smp_prepare_cpus(unsigned int max_cpus)
 {
 	void __iomem *p;
+	u32 val;
 
 	/* let APMU code install data related to shmobile_boot_vector */
 	shmobile_smp_apmu_prepare_cpus(max_cpus);
+
+	/* setup for debug mode */
+	if (rcar_gen2_read_mode_pins() & MD(21)) {
+		p = ioremap_nocache(APMU, 0x2000);
+		val = readl_relaxed(p + CA15DBGRCR);
+		writel_relaxed((val | 0x01f80000), p + CA15DBGRCR);
+		val = readl_relaxed(p + CA7DBGRCR);
+		writel_relaxed((val | 0x01f83330), p + CA7DBGRCR);
+		iounmap(p);
+	}
 
 	/* turn on power to SCU */
 	r8a7790_pm_init();
