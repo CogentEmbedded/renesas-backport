@@ -4,6 +4,7 @@
 #include <linux/pm_domain.h>
 
 #include "pm-rcar.h"
+#include "rcar-gen2.h"
 
 struct platform_device;
 

@@ -1,6 +1,7 @@
 /*
  * SMP support for r8a7791
  *
+ * Copyright (C) 2014 Renesas Electronics Corporation
  * Copyright (C) 2013 Renesas Solutions Corp.
  * Copyright (C) 2013 Magnus Damm
  *
@@ -24,12 +25,26 @@
 #include "r8a7791.h"
 #include "rcar-gen2.h"
 
+#define APMU		0xe6151000
+#define CA15DBGRCR	0x1180
+
 static void __init r8a7791_smp_prepare_cpus(unsigned int max_cpus)
 {
+	void __iomem *p;
+	u32 val;
+
 	/* let APMU code install data related to shmobile_boot_vector */
 	shmobile_smp_apmu_prepare_cpus(max_cpus);
 
 	r8a7791_pm_init();
+
+	/* setup for debug mode */
+	if (rcar_gen2_read_mode_pins() & MD(21)) {
+		p = ioremap_nocache(APMU, 0x2000);
+		val = readl_relaxed(p + CA15DBGRCR);
+		writel_relaxed((val | 0x01f80000), p + CA15DBGRCR);
+		iounmap(p);
+	}
 }
 
 struct smp_operations r8a7791_smp_ops __initdata = {
