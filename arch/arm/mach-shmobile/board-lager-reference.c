@@ -28,6 +28,8 @@
 #include <mach/rcar-gen2.h>
 #include <mach/r8a7790.h>
 #include <asm/mach/arch.h>
+#include <sound/rcar_snd.h>
+#include <sound/simple_card.h>
 
 /* DU */
 static struct rcar_du_encoder_data lager_du_encoders[] = {
@@ -85,6 +87,77 @@ static void __init lager_add_du_device(void)
 	platform_device_register_full(&info);
 }
 
+/* Sound */
+static struct rsnd_ssi_platform_info rsnd_ssi[] = {
+	RSND_SSI(AUDIOPP_DMAC_SLAVE_CMD0_TO_SSI0, gic_spi(370), 0),
+	RSND_SSI(AUDIOPP_DMAC_SLAVE_SSI1_TO_SCU1, gic_spi(371), RSND_SSI_CLK_PIN_SHARE),
+};
+
+static struct rsnd_src_platform_info rsnd_src[2] = {
+	RSND_SRC(0, AUDIO_DMAC_SLAVE_SCU0_TX),
+	RSND_SRC(0, AUDIO_DMAC_SLAVE_SCU1_RX),
+};
+
+static struct rsnd_dvc_platform_info rsnd_dvc = {
+};
+
+static struct rsnd_dai_platform_info rsnd_dai = {
+	.playback = { .ssi = &rsnd_ssi[0], .src = &rsnd_src[0], .dvc = &rsnd_dvc, },
+	.capture  = { .ssi = &rsnd_ssi[1], .src = &rsnd_src[1], },
+};
+
+static struct rcar_snd_info rsnd_info = {
+	.flags		= RSND_GEN2,
+	.ssi_info	= rsnd_ssi,
+	.ssi_info_nr	= ARRAY_SIZE(rsnd_ssi),
+	.src_info	= rsnd_src,
+	.src_info_nr	= ARRAY_SIZE(rsnd_src),
+	.dvc_info	= &rsnd_dvc,
+	.dvc_info_nr	= 1,
+	.dai_info	= &rsnd_dai,
+	.dai_info_nr	= 1,
+};
+
+static struct asoc_simple_card_info rsnd_card_info = {
+	.name		= "SSI01-AK4643",
+	.codec		= "ak4642-codec.2-0012",
+	.platform	= "rcar_sound",
+	.daifmt		= SND_SOC_DAIFMT_LEFT_J | SND_SOC_DAIFMT_CBM_CFM,
+	.cpu_dai = {
+		.name	= "rcar_sound",
+	},
+	.codec_dai = {
+		.name	= "ak4642-hifi",
+		.sysclk	= 11289600,
+	},
+};
+
+static void __init lager_add_rsnd_device(void)
+{
+	struct resource rsnd_resources[] = {
+		[RSND_GEN2_SCU]  = DEFINE_RES_MEM(0xec500000, 0x1000),
+		[RSND_GEN2_ADG]  = DEFINE_RES_MEM(0xec5a0000, 0x100),
+		[RSND_GEN2_SSIU] = DEFINE_RES_MEM(0xec540000, 0x1000),
+		[RSND_GEN2_SSI]  = DEFINE_RES_MEM(0xec541000, 0x1280),
+	};
+
+	struct platform_device_info cardinfo = {
+		.parent         = &platform_bus,
+		.name           = "asoc-simple-card",
+		.id             = -1,
+		.data           = &rsnd_card_info,
+		.size_data      = sizeof(struct asoc_simple_card_info),
+		.dma_mask       = DMA_BIT_MASK(32),
+	};
+
+	platform_device_register_resndata(
+		&platform_bus, "rcar_sound", -1,
+		rsnd_resources, ARRAY_SIZE(rsnd_resources),
+		&rsnd_info, sizeof(rsnd_info));
+
+	platform_device_register_full(&cardinfo);
+}
+
 /*
  * This is a really crude hack to provide clkdev support to platform
  * devices until they get moved to DT.
@@ -106,6 +179,11 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "du2", "du.2", "rcar-du-r8a7790" },
 	{ "lvds0", "lvds.0", "rcar-du-r8a7790" },
 	{ "lvds1", "lvds.1", "rcar-du-r8a7790" },
+	{ "ssi0", "ssi.0", "rcar_sound" },
+	{ "ssi1", "ssi.1", "rcar_sound" },
+	{ "src0", "src.0", "rcar_sound" },
+	{ "src1", "src.1", "rcar_sound" },
+	{ "dvc0", "dvc.0", "rcar_sound" },
 };
 
 /*
@@ -119,6 +197,10 @@ static const struct clk_name clk_enables[] __initconst = {
 	{ "sdhi0", NULL, "ee100000.sd" },
 	{ "sdhi2", NULL, "ee140000.sd" },
 	{ "thermal", NULL, "e61f0000.thermal" },
+	{ "ssi", NULL, "rcar_sound" },
+	{ "scu", NULL, "rcar_sound" },
+	{ "dmal", NULL, "sh-dma-engine.0" },
+	{ "dmah", NULL, "sh-dma-engine.1" },
 };
 
 static void __init lager_add_standard_devices(void)
@@ -129,6 +211,7 @@ static void __init lager_add_standard_devices(void)
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 
 	lager_add_du_device();
+	lager_add_rsnd_device();
 }
 
 static const char *lager_boards_compat_dt[] __initdata = {
