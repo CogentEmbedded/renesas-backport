@@ -102,14 +102,15 @@ struct sci_port {
 	struct dma_chan			*chan_rx;
 
 #ifdef CONFIG_SERIAL_SH_SCI_DMA
+	#define SCI_DMA_MAX_DESC 3
 	struct dma_async_tx_descriptor	*desc_tx;
-	struct dma_async_tx_descriptor	*desc_rx[2];
+	struct dma_async_tx_descriptor	*desc_rx[SCI_DMA_MAX_DESC];
 	dma_cookie_t			cookie_tx;
-	dma_cookie_t			cookie_rx[2];
+	dma_cookie_t			cookie_rx[SCI_DMA_MAX_DESC];
 	dma_cookie_t			active_rx;
 	struct scatterlist		sg_tx;
 	unsigned int			sg_len_tx;
-	struct scatterlist		sg_rx[2];
+	struct scatterlist		sg_rx[SCI_DMA_MAX_DESC];
 	size_t				buf_len_rx;
 	struct sh_dmae_slave		param_tx;
 	struct sh_dmae_slave		param_rx;
@@ -117,6 +118,8 @@ struct sci_port {
 	struct work_struct		work_rx;
 	struct timer_list		rx_timer;
 	unsigned int			rx_timeout;
+	int				rx_flag;
+	int				rx_release_flag;
 #endif
 
 	struct notifier_block		freq_transition;
@@ -1261,11 +1264,11 @@ static int sci_dma_rx_push(struct sci_port *s, size_t count)
 
 	room = tty_buffer_request_room(tport, count);
 
-	if (s->active_rx == s->cookie_rx[0]) {
-		active = 0;
-	} else if (s->active_rx == s->cookie_rx[1]) {
-		active = 1;
-	} else {
+	for (active = 0; active < SCI_DMA_MAX_DESC; active++)
+		if (s->active_rx == s->cookie_rx[active])
+			break;
+
+	if (active == SCI_DMA_MAX_DESC) {
 		dev_err(port->dev, "cookie %d not found!\n", s->active_rx);
 		return 0;
 	}
@@ -1297,7 +1300,13 @@ static void sci_dma_rx_complete(void *arg)
 
 	spin_lock_irqsave(&port->lock, flags);
 
-	count = sci_dma_rx_push(s, s->buf_len_rx);
+	s->rx_flag = 1;
+
+	if (port->type == PORT_HSCIF && s->active_rx == s->cookie_rx[0]) {
+		count = sci_dma_rx_push(s, 1);
+		async_tx_ack(s->desc_rx[0]);
+	} else
+		count = sci_dma_rx_push(s, s->buf_len_rx);
 
 	mod_timer(&s->rx_timer, jiffies + s->rx_timeout);
 
@@ -1313,12 +1322,28 @@ static void sci_rx_dma_release(struct sci_port *s, bool enable_pio)
 {
 	struct dma_chan *chan = s->chan_rx;
 	struct uart_port *port = &s->port;
+	size_t buf_len_rx = 0;
+	int t = 100000;
+
+	s->rx_release_flag = 1;
+	while (t--) {
+		if (!s->rx_flag)
+			break;
+		usleep_range(10, 50);
+	}
 
 	s->chan_rx = NULL;
-	s->cookie_rx[0] = s->cookie_rx[1] = -EINVAL;
+	s->cookie_rx[0] = s->cookie_rx[1] = s->cookie_rx[2] = -EINVAL;
+	if (port->type == PORT_HSCIF)
+		/* Add 1byte buffer, because call the DMA receive
+		   callback function immediately. */
+		buf_len_rx = 1 + s->buf_len_rx * 2;
+	else
+		buf_len_rx = s->buf_len_rx * 2;
+
 	dma_release_channel(chan);
 	if (sg_dma_address(&s->sg_rx[0]))
-		dma_free_coherent(port->dev, s->buf_len_rx * 2,
+		dma_free_coherent(port->dev, buf_len_rx,
 				  sg_virt(&s->sg_rx[0]), sg_dma_address(&s->sg_rx[0]));
 	if (enable_pio)
 		sci_start_rx(port);
@@ -1339,9 +1364,14 @@ static void sci_tx_dma_release(struct sci_port *s, bool enable_pio)
 static void sci_submit_rx(struct sci_port *s)
 {
 	struct dma_chan *chan = s->chan_rx;
+	struct uart_port *port = &s->port;
 	int i;
+	int nr_descs = 2;
 
-	for (i = 0; i < 2; i++) {
+	if (port->type == PORT_HSCIF)
+		nr_descs = SCI_DMA_MAX_DESC;
+
+	for (i = 0; i < nr_descs; i++) {
 		struct scatterlist *sg = &s->sg_rx[i];
 		struct dma_async_tx_descriptor *desc;
 
@@ -1357,8 +1387,11 @@ static void sci_submit_rx(struct sci_port *s)
 
 		if (!desc || s->cookie_rx[i] < 0) {
 			if (i) {
-				async_tx_ack(s->desc_rx[0]);
-				s->cookie_rx[0] = -EINVAL;
+				int j;
+				for (j = 0; j < i; j++) {
+					async_tx_ack(s->desc_rx[j]);
+					s->cookie_rx[j] = -EINVAL;
+				}
 			}
 			if (desc) {
 				async_tx_ack(desc);
@@ -1371,11 +1404,13 @@ static void sci_submit_rx(struct sci_port *s)
 		}
 		dev_dbg(s->port.dev, "%s(): cookie %d to #%d\n",
 			__func__, s->cookie_rx[i], i);
+
+		if (i == 0)
+			dma_async_issue_pending(chan);
+
 	}
 
 	s->active_rx = s->cookie_rx[0];
-
-	dma_async_issue_pending(chan);
 }
 
 static void work_fn_rx(struct work_struct *work)
@@ -1384,19 +1419,25 @@ static void work_fn_rx(struct work_struct *work)
 	struct uart_port *port = &s->port;
 	struct dma_async_tx_descriptor *desc;
 	int new;
+	int next;
 
-	if (s->active_rx == s->cookie_rx[0]) {
-		new = 0;
-	} else if (s->active_rx == s->cookie_rx[1]) {
-		new = 1;
-	} else {
+	if (!s->chan_rx) {
+		dev_dbg(port->dev, "%s: DMA channel is released.\n", __func__);
+		return;
+	}
+
+	for (new = 0; new < SCI_DMA_MAX_DESC; new++)
+		if (s->active_rx == s->cookie_rx[new])
+			break;
+
+	if (new == SCI_DMA_MAX_DESC) {
 		dev_err(port->dev, "cookie %d not found!\n", s->active_rx);
 		return;
 	}
 	desc = s->desc_rx[new];
 
 	if (dma_async_is_tx_complete(s->chan_rx, s->active_rx, NULL, NULL) !=
-	    DMA_COMPLETE) {
+	    DMA_SUCCESS) {
 		/* Handle incomplete DMA receive */
 		struct dma_chan *chan = s->chan_rx;
 		struct shdma_desc *sh_desc = container_of(desc,
@@ -1415,19 +1456,34 @@ static void work_fn_rx(struct work_struct *work)
 		if (count)
 			tty_flip_buffer_push(&port->state->port);
 
-		sci_submit_rx(s);
+		if (!s->rx_release_flag)
+			sci_submit_rx(s);
+		s->rx_flag = 0;
 
 		return;
 	}
 
-	s->cookie_rx[new] = desc->tx_submit(desc);
-	if (s->cookie_rx[new] < 0) {
-		dev_warn(port->dev, "Failed submitting Rx DMA descriptor\n");
-		sci_rx_dma_release(s, true);
-		return;
+	if (port->type == PORT_HSCIF) {
+		if (new != 0) {
+			s->cookie_rx[new] = desc->tx_submit(desc);
+			if (s->cookie_rx[new] < 0) {
+				dev_warn(port->dev, "Failed submitting Rx DMA descriptor\n");
+					sci_rx_dma_release(s, true);
+				return;
+			}
+		}
+		next = new % 2 + 1;
+	} else {
+		s->cookie_rx[new] = desc->tx_submit(desc);
+		if (s->cookie_rx[new] < 0) {
+			dev_warn(port->dev, "Failed submitting Rx DMA descriptor\n");
+			sci_rx_dma_release(s, true);
+			return;
+		}
+		next = !new;
 	}
 
-	s->active_rx = s->cookie_rx[!new];
+	s->active_rx = s->cookie_rx[next];
 
 	dev_dbg(port->dev, "%s: cookie %d #%d, new active #%d\n",
 		__func__, s->cookie_rx[new], new, s->active_rx);
@@ -1638,6 +1694,9 @@ static void sci_request_dma(struct uart_port *port)
 	if (s->cfg->dma_slave_tx <= 0 || s->cfg->dma_slave_rx <= 0)
 		return;
 
+	s->rx_flag = 0;
+	s->rx_release_flag = 0;
+
 	dma_cap_zero(mask);
 	dma_cap_set(DMA_SLAVE, mask);
 
@@ -1679,14 +1738,24 @@ static void sci_request_dma(struct uart_port *port)
 	chan = dma_request_channel(mask, filter, param);
 	dev_dbg(port->dev, "%s: RX: got channel %p\n", __func__, chan);
 	if (chan) {
-		dma_addr_t dma[2];
-		void *buf[2];
+		dma_addr_t dma[SCI_DMA_MAX_DESC];
+		void *buf[SCI_DMA_MAX_DESC];
+		size_t sum_buf_len;
+		int nr_sg = 2;
 		int i;
 
 		s->chan_rx = chan;
 
 		s->buf_len_rx = 2 * max(16, (int)port->fifosize);
-		buf[0] = dma_alloc_coherent(port->dev, s->buf_len_rx * 2,
+		if (port->type == PORT_HSCIF) {
+			nr_sg = SCI_DMA_MAX_DESC;
+			/* Add 1byte buffer, because call the DMA receive
+			   callback function immediately. */
+			sum_buf_len = 1 + s->buf_len_rx * 2;
+		} else {
+			sum_buf_len = s->buf_len_rx * 2;
+		}
+		buf[0] = dma_alloc_coherent(port->dev, sum_buf_len,
 					    &dma[0], GFP_KERNEL);
 
 		if (!buf[0]) {
@@ -1696,15 +1765,28 @@ static void sci_request_dma(struct uart_port *port)
 			return;
 		}
 
-		buf[1] = buf[0] + s->buf_len_rx;
-		dma[1] = dma[0] + s->buf_len_rx;
+		if (port->type == PORT_HSCIF) {
+			buf[1] = buf[0] + 1;
+			dma[1] = dma[0] + 1;
+			buf[2] = buf[1] + s->buf_len_rx;
+			dma[2] = dma[1] + s->buf_len_rx;
+		} else {
+			buf[1] = buf[0] + s->buf_len_rx;
+			dma[1] = dma[0] + s->buf_len_rx;
+		}
 
-		for (i = 0; i < 2; i++) {
+		for (i = 0; i < nr_sg; i++) {
 			struct scatterlist *sg = &s->sg_rx[i];
+			unsigned int len;
+
+			if (port->type == PORT_HSCIF && i == 0)
+				len = 1;
+			else
+				len = s->buf_len_rx;
 
 			sg_init_table(sg, 1);
-			sg_set_page(sg, virt_to_page(buf[i]), s->buf_len_rx,
-				    (uintptr_t)buf[i] & ~PAGE_MASK);
+			sg_set_page(sg, virt_to_page(buf[i]), len,
+				(int)buf[i] & ~PAGE_MASK);
 			sg_dma_address(sg) = dma[i];
 		}
 
@@ -1767,6 +1849,8 @@ static void sci_shutdown(struct uart_port *port)
 	sci_stop_rx(port);
 	sci_stop_tx(port);
 	spin_unlock_irqrestore(&port->lock, flags);
+
+	serial_port_out(port, SCSCR, 0x00);
 
 	sci_free_dma(port);
 	sci_free_irq(s);
