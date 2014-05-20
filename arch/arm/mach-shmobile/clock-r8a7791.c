@@ -175,10 +175,11 @@ enum {
 	MSTP813,
 	MSTP811, MSTP810, MSTP809,
 	MSTP726, MSTP724, MSTP723, MSTP721, MSTP720,
-	MSTP719, MSTP718, MSTP715, MSTP714,
+	MSTP719, MSTP718, MSTP717, MSTP716, MSTP715, MSTP714, MSTP713,
 	MSTP522,
+	MSTP502, MSTP501,
 	MSTP314, MSTP312, MSTP311,
-	MSTP216, MSTP207, MSTP206,
+	MSTP219, MSTP216, MSTP207, MSTP206,
 	MSTP204, MSTP203, MSTP202,
 	MSTP124,
 	MSTP_NR
@@ -208,12 +209,18 @@ static struct clk mstp_clks[MSTP_NR] = {
 	[MSTP720] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 20, MSTPSR7, 0), /* SCIF1 */
 	[MSTP719] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 19, MSTPSR7, 0), /* SCIF2 */
 	[MSTP718] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 18, MSTPSR7, 0), /* SCIF3 */
+	[MSTP717] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR7, 17, MSTPSR7, 0), /* HSCIF0 */
+	[MSTP716] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR7, 16, MSTPSR7, 0), /* HSCIF1 */
 	[MSTP715] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 15, MSTPSR7, 0), /* SCIF4 */
 	[MSTP714] = SH_CLK_MSTP32_STS(&p_clk, SMSTPCR7, 14, MSTPSR7, 0), /* SCIF5 */
+	[MSTP713] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR7, 13, MSTPSR7, 0), /* HSCIF2 */
 	[MSTP522] = SH_CLK_MSTP32_STS(&extal_clk, SMSTPCR5, 22, MSTPSR5, 0), /* Thermal */
+	[MSTP502] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR5, 2, MSTPSR5, 0), /* Audio-DMAC low */
+	[MSTP501] = SH_CLK_MSTP32_STS(&zs_clk, SMSTPCR5, 1, MSTPSR5, 0), /* Audio-DMAC hi */
 	[MSTP314] = SH_CLK_MSTP32_STS(&div4_clks[DIV4_SD0], SMSTPCR3, 14, MSTPSR3, 0), /* SDHI0 */
 	[MSTP312] = SH_CLK_MSTP32_STS(&div6_clks[DIV6_SD1], SMSTPCR3, 12, MSTPSR3, 0), /* SDHI1 */
 	[MSTP311] = SH_CLK_MSTP32_STS(&div6_clks[DIV6_SD2], SMSTPCR3, 11, MSTPSR3, 0), /* SDHI2 */
+	[MSTP219] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 19, MSTPSR2, 0), /* SYS-DMAC LOW */
 	[MSTP216] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 16, MSTPSR2, 0), /* SCIFB2 */
 	[MSTP207] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 7, MSTPSR2, 0), /* SCIFB1 */
 	[MSTP206] = SH_CLK_MSTP32_STS(&mp_clk, SMSTPCR2, 6, MSTPSR2, 0), /* SCIFB0 */
@@ -261,12 +268,18 @@ static struct clk_lookup lookups[] = {
 	CLKDEV_DEV_ID("sh-sci.12", &mstp_clks[MSTP1106]), /* SCIFA3 */
 	CLKDEV_DEV_ID("sh-sci.13", &mstp_clks[MSTP1107]), /* SCIFA4 */
 	CLKDEV_DEV_ID("sh-sci.14", &mstp_clks[MSTP1108]), /* SCIFA5 */
+	CLKDEV_DEV_ID("sh-sci.15", &mstp_clks[MSTP717]), /* HSCIF0 */
+	CLKDEV_DEV_ID("sh-sci.16", &mstp_clks[MSTP716]), /* HSCIF1 */
+	CLKDEV_DEV_ID("sh-sci.17", &mstp_clks[MSTP713]), /* HSCIF2 */
 	CLKDEV_DEV_ID("sh_mobile_sdhi.0", &mstp_clks[MSTP314]),
 	CLKDEV_DEV_ID("sh_mobile_sdhi.1", &mstp_clks[MSTP312]),
 	CLKDEV_DEV_ID("sh_mobile_sdhi.2", &mstp_clks[MSTP311]),
 	CLKDEV_DEV_ID("sh_cmt.0", &mstp_clks[MSTP124]),
 	CLKDEV_DEV_ID("qspi.0", &mstp_clks[MSTP917]),
 	CLKDEV_DEV_ID("rcar_thermal", &mstp_clks[MSTP522]),
+	CLKDEV_DEV_ID("sh-dma-engine.0", &mstp_clks[MSTP502]),
+	CLKDEV_DEV_ID("sh-dma-engine.1", &mstp_clks[MSTP501]),
+	CLKDEV_DEV_ID("sh-dma-engine.2", &mstp_clks[MSTP219]),
 	CLKDEV_DEV_ID("i2c-rcar_gen2.0", &mstp_clks[MSTP931]),
 	CLKDEV_DEV_ID("i2c-rcar_gen2.1", &mstp_clks[MSTP930]),
 	CLKDEV_DEV_ID("i2c-rcar_gen2.2", &mstp_clks[MSTP929]),

@@ -26,6 +26,7 @@
 #include <linux/platform_data/gpio-rcar.h>
 #include <linux/platform_data/irq-renesas-irqc.h>
 #include <linux/serial_sci.h>
+#include <linux/dma-mapping.h>
 #include <linux/sh_dma.h>
 #include <linux/sh_timer.h>
 #include <mach/common.h>
@@ -34,6 +35,89 @@
 #include <mach/r8a7791.h>
 #include <mach/rcar-gen2.h>
 #include <asm/mach/arch.h>
+
+#define DMAE_CHANNEL(a, b)			\
+{						\
+	.offset		= (a) - 0x20,		\
+	.dmars		= (a) - 0x20 + 0x40,	\
+	.chclr_bit	= (b),			\
+	.chclr_offset	= 0x80 - 0x20,		\
+}
+
+/* Sys-DMAC */
+#define SYS_DMAC_SLAVE(_id, _bit, _addr, toffset, roffset, t, r)\
+{								\
+	.slave_id	= SYS_DMAC_SLAVE_## _id ##_TX,		\
+	.addr		= _addr + toffset,			\
+	.chcr		= CHCR_TX(XMIT_SZ_## _bit ##BIT), 	\
+	.mid_rid	= t,					\
+}, {								\
+	.slave_id	= SYS_DMAC_SLAVE_## _id ##_RX,		\
+	.addr		= _addr + roffset,			\
+	.chcr		= CHCR_RX(XMIT_SZ_## _bit ##BIT), 	\
+	.mid_rid	= r,					\
+}
+
+static const struct sh_dmae_slave_config r8a7791_sys_dmac_slaves[] = {
+	SYS_DMAC_SLAVE(SDHI0, 16, 0xee100000, 0x60, 0x2060, 0xcd, 0xce),
+	SYS_DMAC_SLAVE(SDHI2, 16, 0xee140000, 0x30, 0x2030, 0xc1, 0xc2),
+	SYS_DMAC_SLAVE(SDHI3, 16, 0xee160000, 0x30, 0x2030, 0xd3, 0xd4),
+	SYS_DMAC_SLAVE(HSCIF0, 8, 0xe62c0000, 0xc,  0x14,   0x39, 0x3a),
+	SYS_DMAC_SLAVE(HSCIF1, 8, 0xe62c8000, 0xc,  0x14,   0x4d, 0x4e),
+};
+
+static const struct sh_dmae_channel r8a7791_sys_dmac_channels[] = {
+	DMAE_CHANNEL(0x8000, 0),
+	DMAE_CHANNEL(0x8080, 1),
+	DMAE_CHANNEL(0x8100, 2),
+	DMAE_CHANNEL(0x8180, 3),
+	DMAE_CHANNEL(0x8200, 4),
+	DMAE_CHANNEL(0x8280, 5),
+	DMAE_CHANNEL(0x8300, 6),
+	DMAE_CHANNEL(0x8380, 7),
+	DMAE_CHANNEL(0x8400, 8),
+	DMAE_CHANNEL(0x8480, 9),
+	DMAE_CHANNEL(0x8500, 10),
+	DMAE_CHANNEL(0x8580, 11),
+	DMAE_CHANNEL(0x8600, 12),
+	DMAE_CHANNEL(0x8680, 13),
+	DMAE_CHANNEL(0x8700, 14),
+};
+
+static struct sh_dmae_pdata r8a7791_sys_dmac_platform_data = {
+	.slave		= r8a7791_sys_dmac_slaves,
+	.slave_num	= ARRAY_SIZE(r8a7791_sys_dmac_slaves),
+	.channel	= r8a7791_sys_dmac_channels,
+	.channel_num	= ARRAY_SIZE(r8a7791_sys_dmac_channels),
+	.ts_low_shift	= TS_LOW_SHIFT,
+	.ts_low_mask	= TS_LOW_BIT << TS_LOW_SHIFT,
+	.ts_high_shift	= TS_HI_SHIFT,
+	.ts_high_mask	= TS_HI_BIT << TS_HI_SHIFT,
+	.ts_shift	= dma_ts_shift,
+	.ts_shift_num	= ARRAY_SIZE(dma_ts_shift),
+	.dmaor_init	= DMAOR_DME,
+	.chclr_present	= 1,
+	.chclr_bitwise	= 1,
+};
+
+static struct resource r8a7791_sys_dmac_resources[] = {
+	/* Channel registers and DMAOR for low */
+	DEFINE_RES_MEM(0xe6700020, 0x8763 - 0x20),
+	DEFINE_RES_IRQ(gic_spi(197)),
+	DEFINE_RES_NAMED(gic_spi(200), 15, NULL, IORESOURCE_IRQ),
+
+	/*
+	 * HI is not supported
+	 * since IRQ has strange mapping
+	 */
+};
+
+#define r8a7791_register_sys_dmac(id)				\
+	platform_device_register_resndata(			\
+		&platform_bus, "sh-dma-engine", 2 + id,		\
+		&r8a7791_sys_dmac_resources[id * 3],	3,	\
+		&r8a7791_sys_dmac_platform_data,		\
+		sizeof(r8a7791_sys_dmac_platform_data))
 
 /* Audio-DMAC */
 #define AUDIO_DMAC_SLAVE(_id, _addr, toffset, roffset, t, r)	\
@@ -77,14 +161,6 @@ static const struct sh_dmae_slave_config r8a7791_audio_dmac_slaves[] = {
 	AUDIO_DMAC_SSI_SLAVE(8, 0xec241200, 0x11, 0x12),
 	AUDIO_DMAC_SSI_SLAVE(9, 0xec241240, 0x13, 0x14),
 };
-
-#define DMAE_CHANNEL(a, b)			\
-{						\
-	.offset		= (a) - 0x20,		\
-	.dmars		= (a) - 0x20 + 0x40,	\
-	.chclr_bit	= (b),			\
-	.chclr_offset	= 0x80 - 0x20,		\
-}
 
 static const struct sh_dmae_channel r8a7791_audio_dmac_channels[] = {
 	DMAE_CHANNEL(0x8000, 0),
@@ -236,11 +312,13 @@ void __init r8a7791_pinmux_init(void)
 	r8a7791_register_gpio(7);
 }
 
-#define __R8A7791_SCIF(scif_type, index, baseaddr, irq)			\
+#define __R8A7791_SCIF(scif_type, index, baseaddr, irq, dma_tx, dma_rx)\
 static struct plat_sci_port scif##index##_platform_data = {		\
 	.type		= scif_type,					\
 	.flags		= UPF_BOOT_AUTOCONF | UPF_IOREMAP,		\
 	.scscr		= SCSCR_RE | SCSCR_TE,				\
+	.dma_slave_tx	= dma_tx,					\
+	.dma_slave_rx	= dma_rx,					\
 };									\
 									\
 static struct resource scif##index##_resources[] = {			\
@@ -249,13 +327,16 @@ static struct resource scif##index##_resources[] = {			\
 }
 
 #define R8A7791_SCIF(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_SCIF, index, baseaddr, irq)
+	__R8A7791_SCIF(PORT_SCIF, index, baseaddr, irq, 0, 0)
 
 #define R8A7791_SCIFA(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_SCIFA, index, baseaddr, irq)
+	__R8A7791_SCIF(PORT_SCIFA, index, baseaddr, irq, 0, 0)
 
 #define R8A7791_SCIFB(index, baseaddr, irq)				\
-	__R8A7791_SCIF(PORT_SCIFB, index, baseaddr, irq)
+	__R8A7791_SCIF(PORT_SCIFB, index, baseaddr, irq, 0, 0)
+
+#define R8A7791_HSCIF(index, baseaddr, irq, dma_tx, dma_rx)		\
+	__R8A7791_SCIF(PORT_HSCIF, index, baseaddr, irq, dma_tx, dma_rx)
 
 R8A7791_SCIFA(0,  0xe6c40000, gic_spi(144)); /* SCIFA0 */
 R8A7791_SCIFA(1,  0xe6c50000, gic_spi(145)); /* SCIFA1 */
@@ -272,6 +353,11 @@ R8A7791_SCIF(11,  0xe6ee8000, gic_spi(25)); /* SCIF5 */
 R8A7791_SCIFA(12, 0xe6c70000, gic_spi(29)); /* SCIFA3 */
 R8A7791_SCIFA(13, 0xe6c78000, gic_spi(30)); /* SCIFA4 */
 R8A7791_SCIFA(14, 0xe6c80000, gic_spi(31)); /* SCIFA5 */
+R8A7791_HSCIF(15, 0xe62c0000, gic_spi(154),
+	SYS_DMAC_SLAVE_HSCIF0_TX, SYS_DMAC_SLAVE_HSCIF0_RX); /* HSCIF0 */
+R8A7791_HSCIF(16, 0xe62c8000, gic_spi(155),
+	SYS_DMAC_SLAVE_HSCIF1_TX, SYS_DMAC_SLAVE_HSCIF1_RX); /* HSCIF1 */
+R8A7791_HSCIF(17, 0xe62d0000, gic_spi(21), 0, 0); /* HSCIF2 */
 
 #define r8a7791_register_scif(index)					       \
 	platform_device_register_resndata(&platform_bus, "sh-sci", index,      \
@@ -335,8 +421,13 @@ static const struct resource thermal_resources[] __initconst = {
 					thermal_resources,		\
 					ARRAY_SIZE(thermal_resources))
 
+static u64 hscif0_dmamask = DMA_BIT_MASK(32);
+static u64 hscif1_dmamask = DMA_BIT_MASK(32);
+
 void __init r8a7791_add_dt_devices(void)
 {
+	struct platform_device *pdev;
+
 	r8a7791_register_scif(0);
 	r8a7791_register_scif(1);
 	r8a7791_register_scif(2);
@@ -352,10 +443,18 @@ void __init r8a7791_add_dt_devices(void)
 	r8a7791_register_scif(12);
 	r8a7791_register_scif(13);
 	r8a7791_register_scif(14);
+	pdev = r8a7791_register_scif(15);
+	pdev->dev.dma_mask = &hscif0_dmamask;
+	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
+	pdev = r8a7791_register_scif(16);
+	pdev->dev.dma_mask = &hscif1_dmamask;
+	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
+	r8a7791_register_scif(17);
 	r8a7791_register_cmt(00);
 	r8a7791_register_audio_dmac(0);
 	r8a7791_register_audio_dmac(1);
 	r8a7791_register_audmapp();
+	r8a7791_register_sys_dmac(0);
 }
 
 void __init r8a7791_add_standard_devices(void)

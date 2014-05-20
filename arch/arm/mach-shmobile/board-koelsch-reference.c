@@ -22,6 +22,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/gpio.h>
 #include <linux/kernel.h>
+#include <linux/mfd/tmio.h>
+#include <linux/mmc/host.h>
+#include <linux/mmc/sh_mobile_sdhi.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/rcar-du.h>
@@ -37,6 +40,77 @@
 #include <asm/mach/arch.h>
 #include <sound/rcar_snd.h>
 #include <sound/simple_card.h>
+
+/* SDHI0 */
+static struct sh_mobile_sdhi_info sdhi0_info __initdata = {
+	.dma_slave_tx	= SYS_DMAC_SLAVE_SDHI0_TX,
+	.dma_slave_rx	= SYS_DMAC_SLAVE_SDHI0_RX,
+	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
+			  MMC_CAP_POWER_OFF_CARD,
+	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
+	.tmio_flags	= TMIO_MMC_HAS_IDLE_WAIT,
+	/* FIXME
+	 * GPIO and GPIO regulator came from DT */
+	.tmio_ocr_mask  = MMC_VDD_32_33 | MMC_VDD_33_34,
+};
+
+static struct resource sdhi0_resources[] __initdata = {
+	DEFINE_RES_MEM(0xee100000, 0x200),
+	DEFINE_RES_IRQ(gic_spi(165)),
+};
+
+/* SDHI2 */
+static struct sh_mobile_sdhi_info sdhi1_info __initdata = {
+	.dma_slave_tx	= SYS_DMAC_SLAVE_SDHI2_TX,
+	.dma_slave_rx	= SYS_DMAC_SLAVE_SDHI2_RX,
+	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
+			  MMC_CAP_POWER_OFF_CARD,
+	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
+	.tmio_flags	= TMIO_MMC_HAS_IDLE_WAIT,
+	/* FIXME
+	 * GPIO and GPIO regulator came from DT */
+	.tmio_ocr_mask  = MMC_VDD_32_33 | MMC_VDD_33_34,
+};
+
+static struct resource sdhi1_resources[] __initdata = {
+	DEFINE_RES_MEM(0xee140000, 0x100),
+	DEFINE_RES_IRQ(gic_spi(167)),
+};
+
+/* SDHI3 */
+static struct sh_mobile_sdhi_info sdhi2_info __initdata = {
+	.dma_slave_tx	= SYS_DMAC_SLAVE_SDHI3_TX,
+	.dma_slave_rx	= SYS_DMAC_SLAVE_SDHI3_RX,
+	.tmio_caps	= MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ |
+			  MMC_CAP_POWER_OFF_CARD,
+	.tmio_caps2	= MMC_CAP2_NO_MULTI_READ,
+	.tmio_flags	= TMIO_MMC_HAS_IDLE_WAIT |
+			  TMIO_MMC_WRPROTECT_DISABLE,
+	/* FIXME
+	 * GPIO and GPIO regulator came from DT */
+	.tmio_ocr_mask  = MMC_VDD_32_33 | MMC_VDD_33_34,
+};
+
+static struct resource sdhi2_resources[] __initdata = {
+	DEFINE_RES_MEM(0xee160000, 0x100),
+	DEFINE_RES_IRQ(gic_spi(168)),
+};
+
+static void __init koelsch_add_sdhi_devices(void)
+{
+
+	platform_device_register_resndata(&platform_bus, "sh_mobile_sdhi", 0,
+					  sdhi0_resources, ARRAY_SIZE(sdhi0_resources),
+					  &sdhi0_info, sizeof(struct sh_mobile_sdhi_info));
+
+	platform_device_register_resndata(&platform_bus, "sh_mobile_sdhi", 1,
+					  sdhi1_resources, ARRAY_SIZE(sdhi1_resources),
+					  &sdhi1_info, sizeof(struct sh_mobile_sdhi_info));
+
+	platform_device_register_resndata(&platform_bus, "sh_mobile_sdhi", 2,
+					  sdhi2_resources, ARRAY_SIZE(sdhi2_resources),
+					  &sdhi2_info, sizeof(struct sh_mobile_sdhi_info));
+}
 
 /* DU */
 static struct rcar_du_encoder_data koelsch_du_encoders[] = {
@@ -181,6 +255,9 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "scifa3", NULL, "sh-sci.12" },
 	{ "scifa4", NULL, "sh-sci.13" },
 	{ "scifa5", NULL, "sh-sci.14" },
+	{ "hscif0", NULL, "sh-sci.15" },
+	{ "hscif1", NULL, "sh-sci.16" },
+	{ "hscif2", NULL, "sh-sci.17" },
 	{ "du0", "du.0", "rcar-du-r8a7791" },
 	{ "du1", "du.1", "rcar-du-r8a7791" },
 	{ "lvds0", "lvds.0", "rcar-du-r8a7791" },
@@ -203,9 +280,9 @@ static const struct clk_name clk_enables[] __initconst = {
 	{ "i2c2", NULL, "e6530000.i2c" },
 	{ "msiof0", NULL, "e6e20000.spi" },
 	{ "qspi_mod", NULL, "e6b10000.spi" },
-	{ "sdhi0", NULL, "ee100000.sd" },
-	{ "sdhi1", NULL, "ee140000.sd" },
-	{ "sdhi2", NULL, "ee160000.sd" },
+	{ "sdhi0", NULL, "sh_mobile_sdhi.0" },
+	{ "sdhi1", NULL, "sh_mobile_sdhi.1" },
+	{ "sdhi2", NULL, "sh_mobile_sdhi.2" },
 	{ "thermal", NULL, "e61f0000.thermal" },
 	{ "hsusb", NULL, "renesas_usbhs" },
 	{ "ehci", NULL, "pci-rcar-gen2.1" },
@@ -470,6 +547,7 @@ static void __init koelsch_add_standard_devices(void)
 	koelsch_add_usb_devices();
 	koelsch_add_rsnd_device();
 	koelsch_add_vsp1_devices();
+	koelsch_add_sdhi_devices();
 }
 
 static const char * const koelsch_boards_compat_dt[] __initconst = {
