@@ -29,6 +29,7 @@
 #include "rcar_du_kms.h"
 #include "rcar_du_regs.h"
 #include "rcar_du_lvdsenc.h"
+#include "rcar_lvds_regs.h"
 
 /* -----------------------------------------------------------------------------
  * DRM operations
@@ -308,6 +309,8 @@ static const struct rcar_du_device_info rcar_du_r8a7790_info = {
 	.max_xres = 1920,
 	.max_yres = 1080,
 	.interlace = false,
+	.lvds0_crtc = BIT(0),
+	.lvds1_crtc = BIT(1) | BIT(2),
 };
 
 static const struct rcar_du_device_info rcar_du_r8a7791_info = {
@@ -333,6 +336,8 @@ static const struct rcar_du_device_info rcar_du_r8a7791_info = {
 	.max_xres = 1920,
 	.max_yres = 1080,
 	.interlace = true,
+	.lvds0_crtc = BIT(0),
+	.lvds1_crtc = 0,
 };
 
 #ifdef R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND
@@ -369,6 +374,8 @@ static const struct rcar_du_device_info rcar_du_r8a7794_info = {
 	.max_xres = 1920,
 	.max_yres = 1080,
 	.interlace = true,
+	.lvds0_crtc = 0,
+	.lvds1_crtc = 0,
 };
 
 static const struct platform_device_id rcar_du_id_table[] = {

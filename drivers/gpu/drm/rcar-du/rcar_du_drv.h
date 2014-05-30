@@ -69,6 +69,8 @@ struct rcar_du_device_info {
 	unsigned int max_xres;
 	unsigned int max_yres;
 	bool interlace;
+	unsigned int lvds0_crtc;
+	unsigned int lvds1_crtc;
 };
 
 struct rcar_du_device {
