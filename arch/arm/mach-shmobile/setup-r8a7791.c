@@ -337,6 +337,14 @@ static const struct resource thermal_resources[] __initconst = {
 
 void __init r8a7791_add_dt_devices(void)
 {
+	r8a7791_register_cmt(00);
+	r8a7791_register_audio_dmac(0);
+	r8a7791_register_audio_dmac(1);
+	r8a7791_register_audmapp();
+}
+
+void __init r8a7791_add_standard_devices(void)
+{
 	r8a7791_register_scif(0);
 	r8a7791_register_scif(1);
 	r8a7791_register_scif(2);
@@ -352,24 +360,9 @@ void __init r8a7791_add_dt_devices(void)
 	r8a7791_register_scif(12);
 	r8a7791_register_scif(13);
 	r8a7791_register_scif(14);
-	r8a7791_register_cmt(00);
-	r8a7791_register_audio_dmac(0);
-	r8a7791_register_audio_dmac(1);
-	r8a7791_register_audmapp();
-}
-
-void __init r8a7791_add_standard_devices(void)
-{
 	r8a7791_add_dt_devices();
 	r8a7791_register_irqc(0);
 	r8a7791_register_thermal();
-}
-
-void __init r8a7791_init_early(void)
-{
-#ifndef CONFIG_ARM_ARCH_TIMER
-	shmobile_setup_delay(1500, 2, 4); /* Cortex-A15 @ 1500MHz */
-#endif
 }
 
 #ifdef CONFIG_USE_OF
@@ -380,7 +373,7 @@ static const char *r8a7791_boards_compat_dt[] __initdata = {
 
 DT_MACHINE_START(R8A7791_DT, "Generic R8A7791 (Flattened Device Tree)")
 	.smp		= smp_ops(r8a7791_smp_ops),
-	.init_early	= r8a7791_init_early,
+	.init_early	= shmobile_init_delay,
 	.init_time	= rcar_gen2_timer_init,
 	.dt_compat	= r8a7791_boards_compat_dt,
 MACHINE_END
