@@ -191,13 +191,6 @@ static const struct clk_name clk_names[] __initconst = {
  * This is a really crude hack to work around core platform clock issues
  */
 static const struct clk_name clk_enables[] __initconst = {
-	{ "ether", NULL, "ee700000.ethernet" },
-	{ "msiof1", NULL, "e6e10000.spi" },
-	{ "mmcif1", NULL, "ee220000.mmc" },
-	{ "qspi_mod", NULL, "e6b10000.spi" },
-	{ "sdhi0", NULL, "ee100000.sd" },
-	{ "sdhi2", NULL, "ee140000.sd" },
-	{ "thermal", NULL, "e61f0000.thermal" },
 	{ "hsusb", NULL, "renesas_usbhs" },
 	{ "ehci", NULL, "pci-rcar-gen2.1" },
 	{ "ehci", NULL, "pci-rcar-gen2.2" },
@@ -511,7 +504,7 @@ static const char *lager_boards_compat_dt[] __initdata = {
 
 DT_MACHINE_START(LAGER_DT, "lager")
 	.smp		= smp_ops(r8a7790_smp_ops),
-	.init_early	= r8a7790_init_early,
+	.init_early	= shmobile_init_delay,
 	.init_time	= rcar_gen2_timer_init,
 	.init_machine	= lager_add_standard_devices,
 	.init_late	= shmobile_init_late,
