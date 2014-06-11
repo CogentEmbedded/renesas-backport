@@ -165,7 +165,7 @@
 
 &pfc {
 	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins &usb0_pins &usb1_pins &usb2_pins
-		     &sound_pins &sound_clk_pins &vin0_pins &vin1_pins>;
+		     &sound_pins &sound_clk_pins &vin0_pins &vin1_pins &ssp_pins>;
 	pinctrl-names = "default";
 
 	du_pins: du {
@@ -217,6 +217,11 @@
 		renesas,groups = "msiof1_clk", "msiof1_sync", "msiof1_rx",
 				 "msiof1_tx";
 		renesas,function = "msiof1";
+	};
+
+	ssp_pins: ssp {
+		renesas,groups = "ssp";
+		renesas,function = "ssp";
 	};
 
 	iic1_pins: iic1 {
