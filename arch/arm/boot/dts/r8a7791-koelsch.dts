@@ -230,8 +230,13 @@
 
 &pfc {
 	pinctrl-0 = <&du_pins &scif0_pins &scif1_pins &usb0_pins &usb1_pins &sound_pins
-		     &sound_clk_pins &vin0_pins &vin1_pins>;
+		     &sound_clk_pins &vin0_pins &vin1_pins &ssp_pins>;
 	pinctrl-names = "default";
+
+	ssp_pins: ssp {
+		renesas,groups = "ssp";
+		renesas,function = "ssp";
+	};
 
 	i2c2_pins: i2c2 {
 		renesas,groups = "i2c2";
