@@ -31,7 +31,9 @@
 #include <linux/platform_data/camera-rcar.h>
 #include <linux/platform_data/rcar-du.h>
 #include <linux/platform_data/usb-rcar-gen2-phy.h>
+#if defined(CONFIG_VIDEO_RENESAS_VSP1)
 #include <linux/platform_data/vsp1.h>
+#endif
 #include <linux/sh_dma.h>
 #include <linux/spi/flash.h>
 #include <linux/spi/spi.h>
@@ -245,8 +247,13 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "vin1", NULL, "r8a7790-vin.1" },
 	{ "vspr", NULL, NULL },
 	{ "vsps", NULL, NULL },
+#if defined(CONFIG_VIDEO_RENESAS_VSP1)
 	{ "vsp1-du0", NULL, "vsp1.2" },
 	{ "vsp1-du1", NULL, "vsp1.3" },
+#else
+	{ "vsp1-du0", NULL, NULL },
+	{ "vsp1-du1", NULL, NULL },
+#endif
 	{ "vcp1", NULL, NULL },
 	{ "vcp0", NULL, NULL },
 	{ "vpc1", NULL, NULL },
@@ -647,6 +654,7 @@ static void __init lager_add_camera1_device(void)
 }
 
 /* VSP1 */
+#if defined(CONFIG_VIDEO_RENESAS_VSP1)
 static const struct vsp1_platform_data lager_vspr_pdata __initconst = {
 	.features = VSP1_HAS_LUT | VSP1_HAS_SRU,
 	.rpf_count = 5,
@@ -727,6 +735,7 @@ static void __init lager_add_vsp1_devices(void)
 		platform_device_register_full(&info);
 	}
 }
+#endif
 
 /* MSIOF spidev */
 static const struct spi_board_info spi_bus[] __initconst = {
@@ -807,7 +816,9 @@ static void __init lager_add_standard_devices(void)
 	lager_add_rsnd_device();
 	lager_add_camera0_device();
 	lager_add_camera1_device();
+#if defined(CONFIG_VIDEO_RENESAS_VSP1)
 	lager_add_vsp1_devices();
+#endif
 }
 
 static const char *lager_boards_compat_dt[] __initdata = {
