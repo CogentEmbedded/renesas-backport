@@ -24,9 +24,9 @@
 #include <linux/of_platform.h>
 #include <mach/r8a7779.h>
 #include <mach/clock.h>
-#include <mach/common.h>
 #include <asm/irq.h>
 #include <asm/mach/arch.h>
+#include "common.h"
 #include "irqs.h"
 
 static void __init marzen_init_timer(void)

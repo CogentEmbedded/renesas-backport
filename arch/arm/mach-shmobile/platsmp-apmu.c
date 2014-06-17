@@ -20,7 +20,7 @@
 #include <asm/proc-fns.h>
 #include <asm/smp_plat.h>
 #include <asm/suspend.h>
-#include <mach/common.h>
+#include "common.h"
 
 /* only enable the cluster that includes the boot CPU by default */
 static bool enable_multicluster = false;
