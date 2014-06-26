@@ -335,6 +335,7 @@ static const struct rcar_du_device_info rcar_du_r8a7790_info = {
 	.interlace = false,
 	.lvds0_crtc = BIT(0),
 	.lvds1_crtc = BIT(1) | BIT(2),
+	.vspd_crtc = BIT(0) | BIT(1),
 };
 
 static const struct rcar_du_device_info rcar_du_r8a7791_info = {
@@ -362,6 +363,7 @@ static const struct rcar_du_device_info rcar_du_r8a7791_info = {
 	.interlace = true,
 	.lvds0_crtc = BIT(0),
 	.lvds1_crtc = 0,
+	.vspd_crtc = BIT(0) | BIT(1),
 };
 
 #ifdef R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND
@@ -400,6 +402,7 @@ static const struct rcar_du_device_info rcar_du_r8a7794_info = {
 	.interlace = true,
 	.lvds0_crtc = 0,
 	.lvds1_crtc = 0,
+	.vspd_crtc = BIT(0),
 };
 
 static const struct platform_device_id rcar_du_id_table[] = {

@@ -71,6 +71,7 @@ struct rcar_du_device_info {
 	bool interlace;
 	unsigned int lvds0_crtc;
 	unsigned int lvds1_crtc;
+	unsigned int vspd_crtc;
 };
 
 struct rcar_du_device {
