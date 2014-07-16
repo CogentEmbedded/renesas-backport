@@ -158,7 +158,7 @@ struct rsnd_dma {
 	struct sh_dmae_slave	slave;
 	struct work_struct	work;
 	struct dma_chan		*chan;
-	enum dma_data_direction dir;
+	enum dma_transfer_direction dir;
 
 	int submit_loop;
 	int offset; /* it cares A/B plane */
@@ -281,6 +281,11 @@ int rsnd_gen_probe(struct platform_device *pdev,
 void __iomem *rsnd_gen_reg_get(struct rsnd_priv *priv,
 			       struct rsnd_mod *mod,
 			       enum rsnd_reg reg);
+void rsnd_gen_dma_addr(struct rsnd_priv *priv,
+		       struct rsnd_dma *dma,
+		       struct dma_slave_config *cfg,
+		       int is_play,  int slave_id);
+
 #define rsnd_is_gen1(s)		(((s)->info->flags & RSND_GEN_MASK) == RSND_GEN1)
 #define rsnd_is_gen2(s)		(((s)->info->flags & RSND_GEN_MASK) == RSND_GEN2)
 

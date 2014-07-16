@@ -297,7 +297,6 @@ static void rsnd_dma_of_name(struct rsnd_dma *dma,
 	for (i = 1; i < MOD_MAX; i++) {
 		if (!src) {
 			mod[i] = ssi;
-			break;
 		} else if (!dvc) {
 			mod[i] = src;
 			src = NULL;
@@ -308,6 +307,9 @@ static void rsnd_dma_of_name(struct rsnd_dma *dma,
 
 		if (mod[i] == this)
 			index = i;
+
+		if (mod[i] == ssi)
+			break;
 	}
 
 	if (is_play) {
@@ -315,7 +317,7 @@ static void rsnd_dma_of_name(struct rsnd_dma *dma,
 		dst_mod = mod[index];
 	} else {
 		src_mod = mod[index];
-		dst_mod = mod[index + 1];
+		dst_mod = mod[index - 1];
 	}
 
 	index = 0;
@@ -357,16 +359,13 @@ int rsnd_dma_init(struct rsnd_priv *priv, struct rsnd_dma *dma,
 		return -EIO;
 	}
 
-	cfg.slave_id	= id;
-	cfg.dst_addr	= 0; /* use default addr when playback */
-	cfg.src_addr	= 0; /* use default addr when capture */
-	cfg.direction	= is_play ? DMA_MEM_TO_DEV : DMA_DEV_TO_MEM;
+	rsnd_gen_dma_addr(priv, dma, &cfg, is_play, id);
 
 	ret = dmaengine_slave_config(dma->chan, &cfg);
 	if (ret < 0)
 		goto rsnd_dma_init_err;
 
-	dma->dir = is_play ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
+	dma->dir = is_play ? DMA_MEM_TO_DEV : DMA_DEV_TO_MEM;
 	INIT_WORK(&dma->work, rsnd_dma_do_work);
 
 	return 0;
