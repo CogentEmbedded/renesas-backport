@@ -22,11 +22,13 @@
 #include <linux/init.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/rcar-du.h>
-#include <mach/r8a7790.h>
+
 #include <asm/mach/arch.h>
+
 #include "clock.h"
 #include "common.h"
 #include "irqs.h"
+#include "r8a7790.h"
 #include "rcar-gen2.h"
 
 /* DU */
@@ -90,7 +92,6 @@ static void __init lager_add_du_device(void)
  * devices until they get moved to DT.
  */
 static const struct clk_name clk_names[] __initconst = {
-	{ "cmt0", "fck", "sh-cmt-48-gen2.0" },
 	{ "du0", "du.0", "rcar-du-r8a7790" },
 	{ "du1", "du.1", "rcar-du-r8a7790" },
 	{ "du2", "du.2", "rcar-du-r8a7790" },
@@ -101,7 +102,6 @@ static const struct clk_name clk_names[] __initconst = {
 static void __init lager_add_standard_devices(void)
 {
 	shmobile_clk_workaround(clk_names, ARRAY_SIZE(clk_names), false);
-	r8a7790_add_dt_devices();
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 
 	lager_add_du_device();

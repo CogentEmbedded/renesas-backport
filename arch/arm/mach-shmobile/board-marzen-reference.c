@@ -22,12 +22,14 @@
 #include <linux/clk/shmobile.h>
 #include <linux/clocksource.h>
 #include <linux/of_platform.h>
-#include <mach/r8a7779.h>
+
 #include <asm/irq.h>
 #include <asm/mach/arch.h>
+
 #include "clock.h"
 #include "common.h"
 #include "irqs.h"
+#include "r8a7779.h"
 
 static void __init marzen_init_timer(void)
 {
@@ -35,18 +37,8 @@ static void __init marzen_init_timer(void)
 	clocksource_of_init();
 }
 
-/*
- * This is a really crude hack to provide clkdev support to platform
- * devices until they get moved to DT.
- */
-static const struct clk_name clk_names[] __initconst = {
-	{ "tmu0", "fck", "sh-tmu.0" },
-};
-
 static void __init marzen_init(void)
 {
-	shmobile_clk_workaround(clk_names, ARRAY_SIZE(clk_names), false);
-	r8a7779_add_standard_devices_dt();
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 	r8a7779_init_irq_extpin_dt(1); /* IRQ1 as individual interrupt */
 }

@@ -32,14 +32,16 @@
 #include <linux/sh_timer.h>
 #include <linux/platform_data/sh_ipmmu.h>
 #include <linux/platform_data/irq-renesas-intc-irqpin.h>
-#include <mach/sh73a0.h>
+
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
+
 #include "common.h"
 #include "dma-register.h"
 #include "irqs.h"
+#include "sh73a0.h"
 
 static struct map_desc sh73a0_io_desc[] __initdata = {
 	/* create a 1:1 entity map for 0xe6xxxxxx
@@ -695,6 +697,10 @@ static struct platform_device irqpin3_device = {
 };
 
 static struct platform_device *sh73a0_devices_dt[] __initdata = {
+	&cmt1_device,
+};
+
+static struct platform_device *sh73a0_early_devices[] __initdata = {
 	&scif0_device,
 	&scif1_device,
 	&scif2_device,
@@ -704,10 +710,6 @@ static struct platform_device *sh73a0_devices_dt[] __initdata = {
 	&scif6_device,
 	&scif7_device,
 	&scif8_device,
-	&cmt1_device,
-};
-
-static struct platform_device *sh73a0_early_devices[] __initdata = {
 	&tmu0_device,
 	&ipmmu_device,
 };
