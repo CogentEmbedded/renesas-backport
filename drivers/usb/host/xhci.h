@@ -383,6 +383,7 @@ struct xhci_op_regs {
 #define	PORT_RWE		(1 << 3)
 #define	PORT_HIRD(p)		(((p) & 0xf) << 4)
 #define	PORT_HIRD_MASK		(0xf << 4)
+#define	PORT_L1DS_MASK		(0xff << 8)
 #define	PORT_L1DS(p)		(((p) & 0xff) << 8)
 #define	PORT_HLE		(1 << 16)
 
@@ -1098,6 +1099,14 @@ struct xhci_event_cmd {
 };
 
 /* flags bitmasks */
+
+/* Address device - disable SetAddress */
+#define TRB_BSR		(1<<9)
+enum xhci_setup_dev {
+	SETUP_CONTEXT_ONLY,
+	SETUP_CONTEXT_ADDRESS,
+};
+
 /* bits 16:23 are the virtual function ID */
 /* bits 24:31 are the slot ID */
 #define TRB_TO_SLOT_ID(p)	(((p) & (0xff<<24)) >> 24)
@@ -1468,6 +1477,8 @@ struct xhci_hcd {
 	/* msi-x vectors */
 	int		msix_count;
 	struct msix_entry	*msix_entries;
+	/* optional clock */
+	struct clk		*clk;
 	/* data structures */
 	struct xhci_device_context_array *dcbaa;
 	struct xhci_ring	*cmd_ring;
@@ -1799,6 +1810,7 @@ int xhci_free_streams(struct usb_hcd *hcd, struct usb_device *udev,
 		struct usb_host_endpoint **eps, unsigned int num_eps,
 		gfp_t mem_flags);
 int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev);
+int xhci_enable_device(struct usb_hcd *hcd, struct usb_device *udev);
 int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev);
 int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 				struct usb_device *udev, int enable);
@@ -1822,7 +1834,7 @@ int xhci_is_vendor_info_code(struct xhci_hcd *xhci, unsigned int trb_comp_code);
 void xhci_ring_cmd_db(struct xhci_hcd *xhci);
 int xhci_queue_slot_control(struct xhci_hcd *xhci, u32 trb_type, u32 slot_id);
 int xhci_queue_address_device(struct xhci_hcd *xhci, dma_addr_t in_ctx_ptr,
-		u32 slot_id);
+		u32 slot_id, enum xhci_setup_dev);
 int xhci_queue_vendor_command(struct xhci_hcd *xhci,
 		u32 field1, u32 field2, u32 field3, u32 field4);
 int xhci_queue_stop_endpoint(struct xhci_hcd *xhci, int slot_id,

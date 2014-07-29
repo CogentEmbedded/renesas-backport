@@ -2495,6 +2495,21 @@ static unsigned hub_is_wusb(struct usb_hub *hub)
 #define HUB_LONG_RESET_TIME	200
 #define HUB_RESET_TIMEOUT	800
 
+/*
+ * "New scheme" enumeration causes an extra state transition to be
+ * exposed to an xhci host and causes USB3 devices to receive control
+ * commands in the default state.  This has been seen to cause
+ * enumeration failures, so disable this enumeration scheme for USB3
+ * devices.
+ */
+static bool use_new_scheme(struct usb_device *udev, int retry)
+{
+	if (udev->speed == USB_SPEED_SUPER)
+		return false;
+
+	return USE_NEW_SCHEME(retry);
+}
+
 static int hub_port_reset(struct usb_hub *hub, int port1,
 			struct usb_device *udev, unsigned int delay, bool warm);
 
@@ -3937,6 +3952,46 @@ static int hub_set_address(struct usb_device *udev, int devnum)
 	return retval;
 }
 
+/*
+ * There are reports of USB 3.0 devices that say they support USB 2.0 Link PM
+ * when they're plugged into a USB 2.0 port, but they don't work when LPM is
+ * enabled.
+ *
+ * Only enable USB 2.0 Link PM if the port is internal (hardwired), or the
+ * device says it supports the new USB 2.0 Link PM errata by setting the BESL
+ * support bit in the BOS descriptor.
+ */
+static void hub_set_initial_usb2_lpm_policy(struct usb_device *udev)
+{
+	int connect_type;
+
+	if (!udev->usb2_hw_lpm_capable)
+		return;
+
+	connect_type = usb_get_hub_port_connect_type(udev->parent,
+			udev->portnum);
+
+	if ((udev->bos->ext_cap->bmAttributes & USB_BESL_SUPPORT) ||
+			connect_type == USB_PORT_CONNECT_TYPE_HARD_WIRED) {
+		udev->usb2_hw_lpm_allowed = 1;
+		usb_set_usb2_hardware_lpm(udev, 1);
+	}
+}
+
+static int hub_enable_device(struct usb_device *udev)
+{
+	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
+
+	if (!hcd->driver->enable_device)
+		return 0;
+	if (udev->state == USB_STATE_ADDRESS)
+		return 0;
+	if (udev->state != USB_STATE_DEFAULT)
+		return -EINVAL;
+
+	return hcd->driver->enable_device(hcd, udev);
+}
+
 /* Reset device, (re)assign address, get device descriptor.
  * Device connection must be stable, no more debouncing needed.
  * Returns device in USB_STATE_ADDRESS, except on error.
@@ -4049,7 +4104,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	 * this area, and this is how Linux has done it for ages.
 	 * Change it cautiously.
 	 *
-	 * NOTE:  If USE_NEW_SCHEME() is true we will start by issuing
+	 * NOTE:  If use_new_scheme() is true we will start by issuing
 	 * a 64-byte GET_DESCRIPTOR request.  This is what Windows does,
 	 * so it may help with some non-standards-compliant devices.
 	 * Otherwise we start with SET_ADDRESS and then try to read the
@@ -4057,9 +4112,16 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	 * value.
 	 */
 	for (i = 0; i < GET_DESCRIPTOR_TRIES; (++i, msleep(100))) {
-		if (USE_NEW_SCHEME(retry_counter) && !(hcd->driver->flags & HCD_USB3)) {
+		bool did_new_scheme = false;
+
+		if (use_new_scheme(udev, retry_counter)) {
 			struct usb_device_descriptor *buf;
 			int r = 0;
+
+			did_new_scheme = true;
+			retval = hub_enable_device(udev);
+			if (retval < 0)
+				goto fail;
 
 #define GET_DESCRIPTOR_BUFSIZE	64
 			buf = kmalloc(GET_DESCRIPTOR_BUFSIZE, GFP_NOIO);
@@ -4149,7 +4211,11 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 			 *  - read ep0 maxpacket even for high and low speed,
 			 */
 			msleep(10);
-			if (USE_NEW_SCHEME(retry_counter) && !(hcd->driver->flags & HCD_USB3))
+			/* use_new_scheme() checks the speed which may have
+			 * changed since the initial look so we cache the result
+			 * in did_new_scheme
+			 */
+			if (did_new_scheme)
 				break;
   		}
 
@@ -4230,6 +4296,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	/* notify HCD that we have a device connected and addressed */
 	if (hcd->driver->update_device)
 		hcd->driver->update_device(hcd, udev);
+	hub_set_initial_usb2_lpm_policy(udev);
 fail:
 	if (retval) {
 		hub_port_disable(hub, port1, 0);
@@ -4939,7 +5006,8 @@ void usb_hub_cleanup(void)
 } /* usb_hub_cleanup() */
 
 static int descriptors_changed(struct usb_device *udev,
-		struct usb_device_descriptor *old_device_descriptor)
+		struct usb_device_descriptor *old_device_descriptor,
+		struct usb_host_bos *old_bos)
 {
 	int		changed = 0;
 	unsigned	index;
@@ -4952,6 +5020,16 @@ static int descriptors_changed(struct usb_device *udev,
 	if (memcmp(&udev->descriptor, old_device_descriptor,
 			sizeof(*old_device_descriptor)) != 0)
 		return 1;
+
+	if ((old_bos && !udev->bos) || (!old_bos && udev->bos))
+		return 1;
+	if (udev->bos) {
+		len = udev->bos->desc->wTotalLength;
+		if (len != old_bos->desc->wTotalLength)
+			return 1;
+		if (memcmp(udev->bos->desc, old_bos->desc, le16_to_cpu(len)))
+			return 1;
+	}
 
 	/* Since the idVendor, idProduct, and bcdDevice values in the
 	 * device descriptor haven't changed, we will assume the
@@ -5048,6 +5126,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 	struct usb_hub			*parent_hub;
 	struct usb_hcd			*hcd = bus_to_hcd(udev->bus);
 	struct usb_device_descriptor	descriptor = udev->descriptor;
+	struct usb_host_bos		*bos;
 	int 				i, ret = 0;
 	int				port1 = udev->portnum;
 
@@ -5064,6 +5143,15 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 		return -EISDIR;
 	}
 	parent_hub = usb_hub_to_struct_hub(parent_hdev);
+
+	/* Disable USB2 hardware LPM.
+	 * It will be re-enabled by the enumeration process.
+	 */
+	if (udev->usb2_hw_lpm_enabled == 1)
+		usb_set_usb2_hardware_lpm(udev, 0);
+
+	bos = udev->bos;
+	udev->bos = NULL;
 
 	/* Disable LPM and LTM while we reset the device and reinstall the alt
 	 * settings.  Device-initiated LPM settings, and system exit latency
@@ -5098,7 +5186,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 		goto re_enumerate;
  
 	/* Device might have changed firmware (DFU or similar) */
-	if (descriptors_changed(udev, &descriptor)) {
+	if (descriptors_changed(udev, &descriptor, bos)) {
 		dev_info(&udev->dev, "device firmware changed\n");
 		udev->descriptor = descriptor;	/* for disconnect() calls */
 		goto re_enumerate;
@@ -5172,11 +5260,15 @@ done:
 	usb_set_usb2_hardware_lpm(udev, 1);
 	usb_unlocked_enable_lpm(udev);
 	usb_enable_ltm(udev);
+	usb_release_bos_descriptor(udev);
+	udev->bos = bos;
 	return 0;
  
 re_enumerate:
 	/* LPM state doesn't matter when we're about to destroy the device. */
 	hub_port_logical_disconnect(parent_hub, port1);
+	usb_release_bos_descriptor(udev);
+	udev->bos = bos;
 	return -ENODEV;
 }
 

@@ -3529,11 +3529,6 @@ void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 		del_timer_sync(&virt_dev->eps[i].stop_cmd_timer);
 	}
 
-	if (udev->usb2_hw_lpm_enabled) {
-		xhci_set_usb2_hardware_lpm(hcd, udev, 0);
-		udev->usb2_hw_lpm_enabled = 0;
-	}
-
 	spin_lock_irqsave(&xhci->lock, flags);
 	/* Don't disable the slot if the host controller is dead. */
 	state = xhci_readl(xhci, &xhci->op_regs->status);
@@ -3662,15 +3657,16 @@ disable_slot:
 }
 
 /*
- * Issue an Address Device command (which will issue a SetAddress request to
- * the device).
+ * Issue an Address Device command and optionally send a corresponding
+ * SetAddress request to the device.
  * We should be protected by the usb_address0_mutex in khubd's hub_port_init, so
  * we should only issue and wait on one address command at the same time.
  *
  * We add one to the device address issued by the hardware because the USB core
  * uses address 1 for the root hubs (even though they're not really devices).
  */
-int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
+static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
+			     enum xhci_setup_dev setup)
 {
 	unsigned long flags;
 	int timeleft;
@@ -3721,7 +3717,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	spin_lock_irqsave(&xhci->lock, flags);
 	cmd_trb = xhci_find_next_enqueue(xhci->cmd_ring);
 	ret = xhci_queue_address_device(xhci, virt_dev->in_ctx->dma,
-					udev->slot_id);
+					udev->slot_id, setup);
 	if (ret) {
 		spin_unlock_irqrestore(&xhci->lock, flags);
 		xhci_dbg(xhci, "FIXME: allocate a command ring segment\n");
@@ -3806,6 +3802,16 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	xhci_dbg(xhci, "Internal device address = %d\n", virt_dev->address);
 
 	return 0;
+}
+
+int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	return xhci_setup_device(hcd, udev, SETUP_CONTEXT_ADDRESS);
+}
+
+int xhci_enable_device(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	return xhci_setup_device(hcd, udev, SETUP_CONTEXT_ONLY);
 }
 
 /*
@@ -4019,7 +4025,7 @@ int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 		}
 
 		pm_val &= ~PORT_HIRD_MASK;
-		pm_val |= PORT_HIRD(hird) | PORT_RWE;
+		pm_val |= PORT_HIRD(hird) | PORT_RWE | PORT_L1DS(udev->slot_id);
 		xhci_writel(xhci, pm_val, pm_addr);
 		pm_val = xhci_readl(xhci, pm_addr);
 		pm_val |= PORT_HLE;
@@ -4027,7 +4033,7 @@ int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 		/* flush write */
 		xhci_readl(xhci, pm_addr);
 	} else {
-		pm_val &= ~(PORT_HLE | PORT_RWE | PORT_HIRD_MASK);
+		pm_val &= ~(PORT_HLE | PORT_RWE | PORT_HIRD_MASK | PORT_L1DS_MASK);
 		xhci_writel(xhci, pm_val, pm_addr);
 		/* flush write */
 		xhci_readl(xhci, pm_addr);
@@ -4635,7 +4641,6 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	struct xhci_hcd		*xhci;
 	struct device		*dev = hcd->self.controller;
 	int			retval;
-	u32			temp;
 
 	/* Accept arbitrarily long scatter-gather lists */
 	hcd->self.sg_tablesize = ~0;
@@ -4663,14 +4668,6 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 		/* xHCI private pointer was set in xhci_pci_probe for the second
 		 * registered roothub.
 		 */
-		xhci = hcd_to_xhci(hcd);
-		temp = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
-		if (HCC_64BIT_ADDR(temp)) {
-			xhci_dbg(xhci, "Enabling 64-bit DMA addresses.\n");
-			dma_set_mask(hcd->self.controller, DMA_BIT_MASK(64));
-		} else {
-			dma_set_mask(hcd->self.controller, DMA_BIT_MASK(32));
-		}
 		return 0;
 	}
 
@@ -4709,12 +4706,12 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 		goto error;
 	xhci_dbg(xhci, "Reset complete\n");
 
-	temp = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
-	if (HCC_64BIT_ADDR(temp)) {
+	/* Set dma_mask and coherent_dma_mask to 64-bits,
+	 * if xHC supports 64-bit addressing */
+	if (HCC_64BIT_ADDR(xhci->hcc_params) &&
+			!dma_set_mask(dev, DMA_BIT_MASK(64))) {
 		xhci_dbg(xhci, "Enabling 64-bit DMA addresses.\n");
-		dma_set_mask(hcd->self.controller, DMA_BIT_MASK(64));
-	} else {
-		dma_set_mask(hcd->self.controller, DMA_BIT_MASK(32));
+		dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
 	}
 
 	xhci_dbg(xhci, "Calling HCD init\n");
