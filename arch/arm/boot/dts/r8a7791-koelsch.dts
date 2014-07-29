@@ -35,7 +35,6 @@
 	aliases {
 		serial6 = &scif0;
 		serial7 = &scif1;
-		serial16 = &hscif1;
 	};
 
 	chosen {
@@ -255,11 +254,6 @@
 		renesas,function = "scif1";
 	};
 
-	hscif1_pins: serial2 {
-		renesas,groups = "hscif1_data", "hscif1_ctrl";
-		renesas,function = "hscif1";
-	};
-
 	ether_pins: ether {
 		renesas,groups = "eth_link", "eth_mdio", "eth_rmii";
 		renesas,function = "eth";
@@ -319,6 +313,16 @@
 		renesas,groups = "i2c6";
 		renesas,function = "i2c6";
 	};
+
+	usb0_pins: usb0 {
+		renesas,groups = "usb0";
+		renesas,function = "usb0";
+	};
+
+	usb1_pins: usb1 {
+		renesas,groups = "usb1";
+		renesas,function = "usb1";
+	};
 };
 
 &ether {
@@ -353,11 +357,6 @@
 	pinctrl-names = "default";
 
 	status = "okay";
-};
-
-&hscif1 {
-	pinctrl-0 = <&hscif1_pins>;
-	pinctrl-names = "default";
 };
 
 &sdhi0 {
@@ -475,6 +474,26 @@
 		regulator-boot-on;
 		regulator-always-on;
 	};
+};
+
+&pci0 {
+	status = "okay";
+	pinctrl-0 = <&usb0_pins>;
+	pinctrl-names = "default";
+};
+
+&pci1 {
+	status = "okay";
+	pinctrl-0 = <&usb1_pins>;
+	pinctrl-names = "default";
+};
+
+&pcie_bus_clk {
+	status = "okay";
+};
+
+&pciec {
+	status = "okay";
 };
 
 &cpu0 {

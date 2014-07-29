@@ -245,19 +245,34 @@
 		renesas,function = "audio_clk";
 	};
 
-	i2c1_pins: i2c1 {
-		renesas,groups = "i2c1";
-		renesas,function = "i2c1";
+	iic1_pins: iic1 {
+		renesas,groups = "iic1";
+		renesas,function = "iic1";
 	};
 
-	i2c2_pins: i2c2 {
-		renesas,groups = "i2c2";
-		renesas,function = "i2c2";
+	iic2_pins: iic2 {
+		renesas,groups = "iic2";
+		renesas,function = "iic2";
 	};
 
-	i2c3_pins: i2c3 {
-		renesas,groups = "i2c3";
-		renesas,function = "i2c3";
+	iic3_pins: iic3 {
+		renesas,groups = "iic3";
+		renesas,function = "iic3";
+	};
+
+	usb0_pins: usb0 {
+		renesas,groups = "usb0";
+		renesas,function = "usb0";
+	};
+
+	usb1_pins: usb1 {
+		renesas,groups = "usb1";
+		renesas,function = "usb1";
+	};
+
+	usb2_pins: usb2 {
+		renesas,groups = "usb2";
+		renesas,function = "usb2";
 	};
 };
 
@@ -377,19 +392,19 @@
 	cpu0-supply = <&vdd_dvfs>;
 };
 
-&i2c0	{
+&iic0	{
 	status = "ok";
 };
 
-&i2c1	{
+&iic1	{
 	status = "ok";
-	pinctrl-0 = <&i2c1_pins>;
+	pinctrl-0 = <&iic1_pins>;
 	pinctrl-names = "default";
 };
 
-&i2c2	{
+&iic2	{
 	status = "ok";
-	pinctrl-0 = <&i2c2_pins>;
+	pinctrl-0 = <&iic2_pins>;
 	pinctrl-names = "default";
 
 	snd_codec: ak4643 {
@@ -399,9 +414,9 @@
 	};
 };
 
-&i2c3 {
+&iic3 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&i2c3_pins>;
+	pinctrl-0 = <&iic3_pins>;
 	status = "okay";
 
 	vdd_dvfs: regulator@68 {
@@ -413,4 +428,22 @@
 		regulator-boot-on;
 		regulator-always-on;
 	};
+};
+
+&pci0 {
+	status = "okay";
+	pinctrl-0 = <&usb0_pins>;
+	pinctrl-names = "default";
+};
+
+&pci1 {
+	status = "okay";
+	pinctrl-0 = <&usb1_pins>;
+	pinctrl-names = "default";
+};
+
+&pci2 {
+	status = "okay";
+	pinctrl-0 = <&usb2_pins>;
+	pinctrl-names = "default";
 };
