@@ -127,7 +127,7 @@ static struct rcar_snd_info rsnd_info = {
 
 static struct asoc_simple_card_info rsnd_card_info = {
 	.name		= "SSI01-AK4643",
-	.codec		= "ak4642-codec.2-0012",
+	.codec		= "ak4642-codec.6-0012",
 	.platform	= "rcar_sound",
 	.daifmt		= SND_SOC_DAIFMT_LEFT_J | SND_SOC_DAIFMT_CBM_CFM,
 	.cpu_dai = {
