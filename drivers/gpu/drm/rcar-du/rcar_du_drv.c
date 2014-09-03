@@ -342,7 +342,6 @@ static const struct rcar_du_device_info rcar_du_r8a7790_info = {
 
 static const struct rcar_du_device_info rcar_du_r8a7791_info = {
 	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
-		    RCAR_DU_FEATURE_NO_LVDS_INTERFACE |
 		    RCAR_DU_FEATURE_VSP1_SOURCE,
 	.num_crtcs = 2,
 	.routes = {
@@ -376,7 +375,6 @@ static struct rcar_du_device_info rcar_du_r8a7793_info = {
 static const struct rcar_du_device_info rcar_du_r8a7793_info = {
 #endif
 	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
-		    RCAR_DU_FEATURE_NO_LVDS_INTERFACE |
 		    RCAR_DU_FEATURE_VSP1_SOURCE,
 	.num_crtcs = 2,
 	.routes = {
@@ -411,7 +409,6 @@ static struct rcar_du_device_info rcar_du_r8a7794_info = {
 static const struct rcar_du_device_info rcar_du_r8a7794_info = {
 #endif
 	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
-		    RCAR_DU_FEATURE_NO_LVDS_INTERFACE |
 		    RCAR_DU_FEATURE_VSP1_SOURCE,
 	.num_crtcs = 2,
 	.routes = {
