@@ -231,6 +231,7 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "tddmac", NULL, NULL },
 	{ "fdp1", NULL, NULL },
 	{ "fdp0", NULL, NULL },
+	{ "pvrsrvkm", NULL, "pvrsrvkm" },
 };
 
 #define DMAE_CHANNEL(a, b)			\
