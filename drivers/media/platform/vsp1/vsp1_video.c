@@ -331,6 +331,30 @@ vsp1_video_format_adjust(struct vsp1_video *video,
 	return true;
 }
 
+static void vsp1_set_cropupdate(struct vsp1_video *video,
+					struct vsp1_video_buffer *buf)
+{
+	if (video->update_crop == VSP1_UPDATE_CROP_REQUESTED) {
+		buf->update_reg = true;
+		video->update_crop = VSP1_UPDATE_CROP_UPDATE;
+	} else
+		buf->update_reg = false;
+}
+
+static void vsp1_update_reg(struct vsp1_pipeline *pipe,
+					struct vsp1_video *video,
+					struct vsp1_video_buffer *buf)
+{
+	struct vsp1_entity *entity;
+	if (buf->update_reg == true) {
+		list_for_each_entry(entity, &pipe->entities, list_pipe)
+			v4l2_subdev_call(&entity->subdev, video,
+				       s_stream, 1);
+		buf->update_reg = false;
+		video->update_crop = VSP1_UPDATE_CROP_NORMAL;
+	}
+}
+
 /* -----------------------------------------------------------------------------
  * Pipeline Management
  */
@@ -619,7 +643,7 @@ vsp1_video_complete_buffer(struct vsp1_video *video)
 					struct vsp1_video_buffer, queue);
 	else if (pipe->lif) {
 		/* In DU output mode reuse the buffer
-		 * if the list is singular. */
+		* if the list is singular. */
 		spin_unlock_irqrestore(&video->irqlock, flags);
 		return done;
 	}
@@ -666,6 +690,8 @@ static void vsp1_video_frame_end(struct vsp1_pipeline *pipe,
 		return;
 
 	spin_lock_irqsave(&pipe->irqlock, flags);
+
+	vsp1_update_reg(pipe, video, buf);
 
 	video->ops->queue(video, buf);
 	pipe->buffers_ready |= 1 << video->pipe_index;
@@ -919,6 +945,7 @@ static void vsp1_video_buffer_queue(struct vb2_buffer *vb)
 	if (video->format.field == V4L2_FIELD_PICONV_DIVIDE
 		|| video->format.field == V4L2_FIELD_PICONV_EXTRACT)
 			vsp1_video_set_bottom(buf, &rpf->video.format);
+	vsp1_set_cropupdate(video, buf);
 	list_add_tail(&buf->queue, &video->irqqueue);
 	spin_unlock_irqrestore(&video->irqlock, flags);
 
@@ -937,6 +964,7 @@ static void vsp1_video_buffer_queue(struct vb2_buffer *vb)
 
 	spin_lock_irqsave(&pipe->irqlock, flags);
 
+	vsp1_update_reg(pipe, video, buf);
 	video->ops->queue(video, buf);
 	pipe->buffers_ready |= 1 << video->pipe_index;
 
@@ -1189,6 +1217,23 @@ err_stop:
 	return ret;
 }
 
+static int vsp1_video_set_crop(struct file *file, void *fh, const struct v4l2_crop *a)
+{
+	struct v4l2_fh *vfh = file->private_data;
+	struct vsp1_video *video = to_vsp1_video(vfh->vdev);
+	struct vsp1_pipeline *pipe = to_vsp1_pipeline(&video->video.entity);
+	unsigned long flags;
+
+	spin_lock_irqsave(&pipe->irqlock, flags);
+	if (video->update_crop != VSP1_UPDATE_CROP_NORMAL) {
+		spin_unlock_irqrestore(&pipe->irqlock, flags);
+		return -EPERM;
+	}
+	video->update_crop = VSP1_UPDATE_CROP_REQUESTED;
+	spin_unlock_irqrestore(&pipe->irqlock, flags);
+	return 0;
+}
+
 static const struct v4l2_ioctl_ops vsp1_video_ioctl_ops = {
 	.vidioc_querycap		= vsp1_video_querycap,
 	.vidioc_g_fmt_vid_cap_mplane	= vsp1_video_get_format,
@@ -1205,6 +1250,7 @@ static const struct v4l2_ioctl_ops vsp1_video_ioctl_ops = {
 	.vidioc_prepare_buf		= vb2_ioctl_prepare_buf,
 	.vidioc_streamon		= vsp1_video_streamon,
 	.vidioc_streamoff		= vb2_ioctl_streamoff,
+	.vidioc_s_crop			= vsp1_video_set_crop,
 };
 
 /* -----------------------------------------------------------------------------
@@ -1360,6 +1406,7 @@ int vsp1_video_init(struct vsp1_video *video, struct vsp1_entity *rwpf)
 		goto error;
 	}
 
+	video->update_crop = VSP1_UPDATE_CROP_NORMAL;
 	return 0;
 
 error:
