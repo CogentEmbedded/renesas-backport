@@ -15,6 +15,8 @@
 #include <linux/threads.h>
 #include <asm/memory.h>
 
+	__CPUINIT
+
 #ifdef CONFIG_SMP
 ENTRY(shmobile_invalidate_start)
 	bl	v7_invalidate_l1
