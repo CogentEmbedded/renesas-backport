@@ -24,11 +24,14 @@
 
 #include "common.h"
 #include "platsmp-apmu.h"
+#include "platsmp-rst.h"
 #include "r8a7791.h"
 #include "rcar-gen2.h"
 
 #define APMU		0xe6151000
 #define CA15DBGRCR	0x1180
+
+#define CA15RESCNT	0x0040
 
 static struct rcar_apmu_config r8a7791_apmu_config[] = {
 	{
@@ -37,10 +40,18 @@ static struct rcar_apmu_config r8a7791_apmu_config[] = {
 	}
 };
 
+static struct rcar_rst_config r8a7791_rst_config[] = {
+	{
+		.rescnt = CA15RESCNT,
+		.rescnt_magic = 0xa5a50000,
+	}
+};
+
 static void __init r8a7791_smp_prepare_cpus(unsigned int max_cpus)
 {
 	void __iomem *p;
 	u32 val;
+	unsigned int k;
 
 	/* let APMU code install data related to shmobile_boot_vector */
 	shmobile_smp_apmu_prepare_cpus(max_cpus,
