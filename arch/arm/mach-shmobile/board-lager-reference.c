@@ -245,6 +245,11 @@ static const struct clk_name clk_names[] __initconst = {
 	{ "fdp1", NULL, NULL },
 	{ "fdp0", NULL, NULL },
 	{ "pvrsrvkm", NULL, "pvrsrvkm" },
+#if IS_ENABLED(CONFIG_USB_RENESAS_USBHS_UDC)
+	{ "hsusb", NULL, "renesas_usbhs" },
+#else
+	{ "ehci", NULL, "pci-rcar-gen2.0" },
+#endif
 };
 
 #define DMAE_CHANNEL(a, b)			\
