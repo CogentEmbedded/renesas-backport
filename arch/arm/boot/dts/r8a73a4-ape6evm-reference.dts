@@ -21,8 +21,7 @@
 	};
 
 	chosen {
-		bootargs = "ignore_loglevel rw";
-		stdout-path = &scifa0;
+		bootargs = "console=ttySC0,115200 ignore_loglevel rw";
 	};
 
 	memory@40000000 {
