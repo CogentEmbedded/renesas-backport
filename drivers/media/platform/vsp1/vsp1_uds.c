@@ -134,16 +134,14 @@ static int uds_s_stream(struct v4l2_subdev *subdev, int enable)
 
 	dev_dbg(uds->entity.vsp1->dev, "hscale %u vscale %u\n", hscale, vscale);
 
-	/* Multi-tap scaling can only be enabled along with alpha scaling if the
-	 * scaling factor is 2/1, 1/1 or 1/2.
+	/* Multi-tap scaling can't be enabled along with alpha scaling when
+	 * scaling down with a factor lower than or equal to 1/2 in either
+	 * direction.
 	 */
-	if (!uds->scale_alpha)
-		multitap = true;
-	else if ((hscale == 2048 && hscale == 4096 && hscale == 8192) &&
-		 (vscale == 2048 && vscale == 4096 && vscale == 8192))
-		multitap = true;
-	else
+	if (uds->scale_alpha && (hscale >= 8192 || vscale >= 8192))
 		multitap = false;
+	else
+		multitap = true;
 
 	vsp1_uds_write(uds, VI6_UDS_CTRL,
 		       (uds->scale_alpha ? VI6_UDS_CTRL_AON : 0) |
