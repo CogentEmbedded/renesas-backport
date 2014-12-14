@@ -16,6 +16,7 @@
 #ifndef TMIO_MMC_H
 #define TMIO_MMC_H
 
+#include <linux/completion.h>
 #include <linux/highmem.h>
 #include <linux/mmc/tmio.h>
 #include <linux/mutex.h>
@@ -58,7 +59,6 @@ enum tmio_mmc_power {
 
 struct tmio_mmc_host {
 	void __iomem *ctl;
-	unsigned long bus_shift;
 	struct mmc_command      *cmd;
 	struct mmc_request      *mrq;
 	struct mmc_data         *data;
@@ -102,6 +102,8 @@ struct tmio_mmc_host {
 	struct mutex		ios_lock;	/* protect set_ios() context */
 	bool			native_hotplug;
 	bool			resuming;
+	bool			done_tuning;
+	struct completion	completion;
 };
 
 int tmio_mmc_host_probe(struct tmio_mmc_host **host,
@@ -163,32 +165,31 @@ static inline void tmio_mmc_abort_dma(struct tmio_mmc_host *host)
 }
 #endif
 
-#ifdef CONFIG_PM
+#ifdef CONFIG_PM_SLEEP
 int tmio_mmc_host_suspend(struct device *dev);
 int tmio_mmc_host_resume(struct device *dev);
-#else
-#define tmio_mmc_host_suspend NULL
-#define tmio_mmc_host_resume NULL
 #endif
 
+#ifdef CONFIG_PM_RUNTIME
 int tmio_mmc_host_runtime_suspend(struct device *dev);
 int tmio_mmc_host_runtime_resume(struct device *dev);
+#endif
 
 static inline u16 sd_ctrl_read16(struct tmio_mmc_host *host, int addr)
 {
-	return readw(host->ctl + (addr << host->bus_shift));
+	return readw(host->ctl + (addr << host->pdata->bus_shift));
 }
 
 static inline void sd_ctrl_read16_rep(struct tmio_mmc_host *host, int addr,
 		u16 *buf, int count)
 {
-	readsw(host->ctl + (addr << host->bus_shift), buf, count);
+	readsw(host->ctl + (addr << host->pdata->bus_shift), buf, count);
 }
 
 static inline u32 sd_ctrl_read32(struct tmio_mmc_host *host, int addr)
 {
-	return readw(host->ctl + (addr << host->bus_shift)) |
-	       readw(host->ctl + ((addr + 2) << host->bus_shift)) << 16;
+	return readw(host->ctl + (addr << host->pdata->bus_shift)) |
+	       readw(host->ctl + ((addr + 2) << host->pdata->bus_shift)) << 16;
 }
 
 static inline void sd_ctrl_write16(struct tmio_mmc_host *host, int addr, u16 val)
@@ -198,19 +199,19 @@ static inline void sd_ctrl_write16(struct tmio_mmc_host *host, int addr, u16 val
 	 */
 	if (host->pdata->write16_hook && host->pdata->write16_hook(host, addr))
 		return;
-	writew(val, host->ctl + (addr << host->bus_shift));
+	writew(val, host->ctl + (addr << host->pdata->bus_shift));
 }
 
 static inline void sd_ctrl_write16_rep(struct tmio_mmc_host *host, int addr,
 		u16 *buf, int count)
 {
-	writesw(host->ctl + (addr << host->bus_shift), buf, count);
+	writesw(host->ctl + (addr << host->pdata->bus_shift), buf, count);
 }
 
 static inline void sd_ctrl_write32(struct tmio_mmc_host *host, int addr, u32 val)
 {
-	writew(val, host->ctl + (addr << host->bus_shift));
-	writew(val >> 16, host->ctl + ((addr + 2) << host->bus_shift));
+	writew(val, host->ctl + (addr << host->pdata->bus_shift));
+	writew(val >> 16, host->ctl + ((addr + 2) << host->pdata->bus_shift));
 }
 
 

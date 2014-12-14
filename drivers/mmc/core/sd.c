@@ -21,6 +21,7 @@
 
 #include "core.h"
 #include "bus.h"
+#include "lock.h"
 #include "mmc_ops.h"
 #include "sd.h"
 #include "sd_ops.h"
@@ -689,6 +690,9 @@ static struct attribute *sd_std_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_oemid.attr,
 	&dev_attr_serial.attr,
+#ifdef CONFIG_MMC_PASSWORDS
+	&dev_attr_lockable.attr,
+#endif
 	NULL,
 };
 
@@ -807,26 +811,32 @@ int mmc_sd_setup_card(struct mmc_host *host, struct mmc_card *card,
 	int err;
 
 	if (!reinit) {
-		/*
-		 * Fetch SCR from card.
-		 */
-		err = mmc_app_send_scr(card, card->raw_scr);
-		if (err)
-			return err;
 
-		err = mmc_decode_scr(card);
-		if (err)
-			return err;
+		if (!mmc_card_locked(card)) {
 
-		/*
-		 * Fetch and process SD Status register.
-		 */
-		err = mmc_read_ssr(card);
-		if (err)
-			return err;
+			/*
+			* Fetch SCR from card. But if the card is locked,
+			* this command will fail, then the card will be freed.
+			* So we won't send the scr command while card is locked.
+			*/
+			err = mmc_app_send_scr(card, card->raw_scr);
+			if (err)
+				return err;
 
-		/* Erase init depends on CSD and SSR */
-		mmc_init_erase(card);
+			err = mmc_decode_scr(card);
+			if (err)
+				return err;
+
+			/*
+			 * Fetch and process SD Status register.
+			 */
+			err = mmc_read_ssr(card);
+			if (err)
+				return err;
+
+			/* Erase init depends on CSD and SSR */
+			mmc_init_erase(card);
+		}
 
 		/*
 		 * Fetch switch information from card.
@@ -906,13 +916,21 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 	int err;
 	u32 cid[4];
 	u32 rocr = 0;
+	u32 status;
 
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
 
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK) {
+		card = host->card;
+		goto check_card;
+	}
+
 	err = mmc_sd_get_cid(host, ocr, cid, &rocr);
 	if (err)
 		return err;
+
+	host->rocr = rocr;
 
 	if (oldcard) {
 		if (memcmp(cid, oldcard->raw_cid, sizeof(cid)) != 0)
@@ -940,6 +958,21 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 			return err;
 	}
 
+check_card:
+	/*
+	* Check if card is locked.
+	*/
+	err = mmc_send_status(card, &status);
+	if (err)
+		goto free_card;
+	if (status & R1_CARD_IS_LOCKED)
+		mmc_card_set_locked(card);
+	else
+		card->state &= ~MMC_STATE_LOCKED;
+
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK)
+		goto setup_card;
+
 	if (!oldcard) {
 		err = mmc_sd_get_csd(host, card);
 		if (err)
@@ -957,12 +990,13 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 			return err;
 	}
 
+setup_card:
 	err = mmc_sd_setup_card(host, card, oldcard != NULL);
 	if (err)
 		goto free_card;
 
 	/* Initialization sequence for UHS-I cards */
-	if (rocr & SD_ROCR_S18A) {
+	if (host->rocr & SD_ROCR_S18A) {
 		err = mmc_sd_init_uhs_card(card);
 		if (err)
 			goto free_card;
@@ -1069,7 +1103,7 @@ static int mmc_sd_suspend(struct mmc_host *host)
 	mmc_claim_host(host);
 	if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
-	host->card->state &= ~MMC_STATE_HIGHSPEED;
+	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_LOCKED);
 	mmc_release_host(host);
 
 	return err;
@@ -1147,6 +1181,9 @@ int mmc_attach_sd(struct mmc_host *host)
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
 
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK)
+		goto init_card;
+
 	err = mmc_send_app_op_cond(host, 0, &ocr);
 	if (err)
 		return err;
@@ -1195,6 +1232,7 @@ int mmc_attach_sd(struct mmc_host *host)
 		goto err;
 	}
 
+init_card:
 	/*
 	 * Detect and init the card.
 	 */
@@ -1202,12 +1240,16 @@ int mmc_attach_sd(struct mmc_host *host)
 	if (err)
 		goto err;
 
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK)
+		goto end;
+
 	mmc_release_host(host);
 	err = mmc_add_card(host->card);
 	mmc_claim_host(host);
 	if (err)
 		goto remove_card;
 
+end:
 	return 0;
 
 remove_card:

@@ -76,6 +76,28 @@
  */
 #define TMIO_MMC_USE_GPIO_CD		(1 << 5)
 
+/*
+ * Some controllers doesn't have over 0x100 register.
+ * it is used to checking accessibility of
+ * CTL_SD_CARD_CLK_CTL / CTL_CLK_AND_WAIT_CTL
+ */
+#define TMIO_MMC_HAVE_HIGH_REG		(1 << 6)
+
+/* Some controllers check the ILL_FUNC bit. */
+#define TMIO_MMC_CHECK_ILL_FUNC		(1 << 7)
+
+/* The start or stop of SD clock don't wait 10msec. */
+#define TMIO_MMC_CLK_NO_SLEEP		(1 << 8)
+
+/* Add SDIO status reserved bits for SH Mobile series. */
+#define TMIO_MMC_SDIO_STATUS_QUIRK	(1 << 9)
+
+/* Actual clock rate. */
+#define TMIO_MMC_CLK_ACTUAL		(1 << 10)
+
+/* Some controllers have UHS-I sampling clock controller */
+#define TMIO_MMC_HAS_UHS_SCC		(1 << 11)
+
 int tmio_core_mmc_enable(void __iomem *cnf, int shift, unsigned long base);
 int tmio_core_mmc_resume(void __iomem *cnf, int shift, unsigned long base);
 void tmio_core_mmc_pwr(void __iomem *cnf, int shift, int state);
@@ -89,6 +111,7 @@ struct tmio_mmc_dma {
 	int slave_id_tx;
 	int slave_id_rx;
 	int alignment_shift;
+	dma_addr_t dma_rx_offset;
 	bool (*filter)(struct dma_chan *chan, void *arg);
 };
 
@@ -102,6 +125,7 @@ struct tmio_mmc_data {
 	unsigned long			capabilities;
 	unsigned long			capabilities2;
 	unsigned long			flags;
+	unsigned long			bus_shift;
 	u32				ocr_mask;	/* available voltages */
 	struct tmio_mmc_dma		*dma;
 	struct device			*dev;
@@ -109,6 +133,17 @@ struct tmio_mmc_data {
 	void (*set_pwr)(struct platform_device *host, int state);
 	void (*set_clk_div)(struct platform_device *host, int state);
 	int (*write16_hook)(struct tmio_mmc_host *host, int addr);
+	void (*disable_auto_cmd12)(int *val);
+	void (*enable_sdbuf_acc32)(struct tmio_mmc_host *host, int enable);
+	int (*start_signal_voltage_switch)(struct tmio_mmc_host *host,
+						unsigned char signal_voltage);
+	int (*card_busy)(struct tmio_mmc_host *host);
+	bool (*inquiry_tuning)(struct tmio_mmc_host *host);
+	void (*init_tuning)(struct tmio_mmc_host *host, unsigned long *num);
+	int (*prepare_tuning)(struct tmio_mmc_host *host, unsigned long tap);
+	int (*select_tuning)(struct tmio_mmc_host *host, unsigned long *tap);
+	bool (*retuning)(struct tmio_mmc_host *host);
+	void (*hw_reset)(struct tmio_mmc_host *host);
 	/* clock management callbacks */
 	int (*clk_enable)(struct platform_device *pdev, unsigned int *f);
 	void (*clk_disable)(struct platform_device *pdev);

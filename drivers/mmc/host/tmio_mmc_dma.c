@@ -1,6 +1,7 @@
 /*
  * linux/drivers/mmc/tmio_mmc_dma.c
  *
+ * Copyright (C) 2014 Renesas Electronics Corporation
  * Copyright (C) 2010-2011 Guennadi Liakhovetski
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,8 +26,14 @@
 
 void tmio_mmc_enable_dma(struct tmio_mmc_host *host, bool enable)
 {
+	struct tmio_mmc_data *pdata = host->pdata;
+
 	if (!host->chan_tx || !host->chan_rx)
 		return;
+
+	if (pdata->enable_sdbuf_acc32 && pdata->dma &&
+				pdata->dma->alignment_shift > 1)
+		pdata->enable_sdbuf_acc32(host, enable);
 
 #if defined(CONFIG_SUPERH) || defined(CONFIG_ARCH_SHMOBILE)
 	/* Switch DMA mode on or off - SuperH specific? */
@@ -57,6 +64,11 @@ static void tmio_mmc_start_dma_rx(struct tmio_mmc_host *host)
 	bool aligned = true, multiple = true;
 	unsigned int align = (1 << pdata->dma->alignment_shift) - 1;
 
+	if (host->force_pio) {
+		ret = 0;
+		goto pio;
+	}
+
 	for_each_sg(sg, sg_tmp, host->sg_len, i) {
 		if (sg_tmp->offset & align)
 			aligned = false;
@@ -74,10 +86,12 @@ static void tmio_mmc_start_dma_rx(struct tmio_mmc_host *host)
 
 	if (sg->length < TMIO_MMC_MIN_DMA_LEN) {
 		host->force_pio = true;
-		return;
+		ret = 0;
+		goto pio;
 	}
 
 	tmio_mmc_disable_mmc_irqs(host, TMIO_STAT_RXRDY);
+	tmio_mmc_enable_dma(host, true);
 
 	/* The only sg element can be unaligned, use our bounce buffer then */
 	if (!aligned) {
@@ -115,7 +129,7 @@ pio:
 			host->chan_tx = NULL;
 			dma_release_channel(chan);
 		}
-		dev_warn(&host->pdev->dev,
+		dev_dbg(&host->pdev->dev,
 			 "DMA failed: %d, falling back to PIO\n", ret);
 	}
 
@@ -134,6 +148,11 @@ static void tmio_mmc_start_dma_tx(struct tmio_mmc_host *host)
 	bool aligned = true, multiple = true;
 	unsigned int align = (1 << pdata->dma->alignment_shift) - 1;
 
+	if (host->force_pio) {
+		ret = 0;
+		goto pio;
+	}
+
 	for_each_sg(sg, sg_tmp, host->sg_len, i) {
 		if (sg_tmp->offset & align)
 			aligned = false;
@@ -151,10 +170,12 @@ static void tmio_mmc_start_dma_tx(struct tmio_mmc_host *host)
 
 	if (sg->length < TMIO_MMC_MIN_DMA_LEN) {
 		host->force_pio = true;
-		return;
+		ret = 0;
+		goto pio;
 	}
 
 	tmio_mmc_disable_mmc_irqs(host, TMIO_STAT_TXRQ);
+	tmio_mmc_enable_dma(host, true);
 
 	/* The only sg element can be unaligned, use our bounce buffer then */
 	if (!aligned) {
@@ -196,7 +217,7 @@ pio:
 			host->chan_rx = NULL;
 			dma_release_channel(chan);
 		}
-		dev_warn(&host->pdev->dev,
+		dev_dbg(&host->pdev->dev,
 			 "DMA failed: %d, falling back to PIO\n", ret);
 	}
 
@@ -207,6 +228,62 @@ pio:
 void tmio_mmc_start_dma(struct tmio_mmc_host *host,
 			       struct mmc_data *data)
 {
+	struct tmio_mmc_data *pdata = host->pdata;
+
+	if (pdata->dma && (!host->chan_tx || !host->chan_rx)) {
+		struct resource *res = platform_get_resource(host->pdev,
+							     IORESOURCE_MEM,
+							     0);
+		struct dma_slave_config cfg = {};
+		dma_cap_mask_t mask;
+		int ret;
+
+		if (!res)
+			return;
+
+		dma_cap_zero(mask);
+		dma_cap_set(DMA_SLAVE, mask);
+
+		host->chan_tx = dma_request_slave_channel_compat(mask,
+					pdata->dma->filter,
+					pdata->dma->chan_priv_tx,
+					&host->pdev->dev, "tx");
+		dev_dbg(&host->pdev->dev, "%s: TX: got channel %p\n", __func__,
+			host->chan_tx);
+
+		if (!host->chan_tx)
+			return;
+
+		if (pdata->dma->chan_priv_tx)
+			cfg.slave_id = pdata->dma->slave_id_tx;
+		cfg.direction = DMA_MEM_TO_DEV;
+		cfg.dst_addr = res->start +
+			       (CTL_SD_DATA_PORT << host->pdata->bus_shift);
+		cfg.src_addr = 0;
+		ret = dmaengine_slave_config(host->chan_tx, &cfg);
+		if (ret < 0)
+			goto ecfgtx;
+
+		host->chan_rx = dma_request_slave_channel_compat(mask,
+					pdata->dma->filter,
+					pdata->dma->chan_priv_rx,
+					&host->pdev->dev, "rx");
+		dev_dbg(&host->pdev->dev, "%s: RX: got channel %p\n", __func__,
+			host->chan_rx);
+
+		if (!host->chan_rx)
+			goto ereqrx;
+
+		if (pdata->dma->chan_priv_rx)
+			cfg.slave_id = pdata->dma->slave_id_rx;
+		cfg.direction = DMA_DEV_TO_MEM;
+		cfg.src_addr = cfg.dst_addr + pdata->dma->dma_rx_offset;
+		cfg.dst_addr = 0;
+		ret = dmaengine_slave_config(host->chan_rx, &cfg);
+		if (ret < 0)
+			goto ecfgrx;
+	}
+
 	if (data->flags & MMC_DATA_READ) {
 		if (host->chan_rx)
 			tmio_mmc_start_dma_rx(host);
@@ -214,6 +291,15 @@ void tmio_mmc_start_dma(struct tmio_mmc_host *host,
 		if (host->chan_tx)
 			tmio_mmc_start_dma_tx(host);
 	}
+	return;
+
+ecfgrx:
+	dma_release_channel(host->chan_rx);
+	host->chan_rx = NULL;
+ereqrx:
+ecfgtx:
+	dma_release_channel(host->chan_tx);
+	host->chan_tx = NULL;
 }
 
 static void tmio_mmc_issue_tasklet_fn(unsigned long priv)
@@ -293,7 +379,7 @@ void tmio_mmc_request_dma(struct tmio_mmc_host *host, struct tmio_mmc_data *pdat
 		if (pdata->dma->chan_priv_tx)
 			cfg.slave_id = pdata->dma->slave_id_tx;
 		cfg.direction = DMA_MEM_TO_DEV;
-		cfg.dst_addr = res->start + (CTL_SD_DATA_PORT << host->bus_shift);
+		cfg.dst_addr = res->start + (CTL_SD_DATA_PORT << host->pdata->bus_shift);
 		cfg.src_addr = 0;
 		ret = dmaengine_slave_config(host->chan_tx, &cfg);
 		if (ret < 0)
@@ -311,7 +397,7 @@ void tmio_mmc_request_dma(struct tmio_mmc_host *host, struct tmio_mmc_data *pdat
 		if (pdata->dma->chan_priv_rx)
 			cfg.slave_id = pdata->dma->slave_id_rx;
 		cfg.direction = DMA_DEV_TO_MEM;
-		cfg.src_addr = cfg.dst_addr;
+		cfg.src_addr = cfg.dst_addr + pdata->dma->dma_rx_offset;
 		cfg.dst_addr = 0;
 		ret = dmaengine_slave_config(host->chan_rx, &cfg);
 		if (ret < 0)
@@ -355,4 +441,6 @@ void tmio_mmc_release_dma(struct tmio_mmc_host *host)
 		free_pages((unsigned long)host->bounce_buf, 0);
 		host->bounce_buf = NULL;
 	}
+	tasklet_kill(&host->dma_complete);
+	tasklet_kill(&host->dma_issue);
 }

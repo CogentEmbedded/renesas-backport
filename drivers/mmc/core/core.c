@@ -41,6 +41,7 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+#include "lock.h"
 
 /* If the device is not responding */
 #define MMC_CORE_TIMEOUT_MS	(10 * 60 * 1000) /* 10 minute timeout */
@@ -570,6 +571,16 @@ void mmc_wait_for_req(struct mmc_host *host, struct mmc_request *mrq)
 {
 	__mmc_start_req(host, mrq);
 	mmc_wait_for_req_done(host, mrq);
+
+	if (mrq->cmd->opcode == MMC_LOCK_UNLOCK) {
+		if (host->card->type == MMC_TYPE_SD)
+			mmc_attach_sd(host);
+		else if (host->card->type == MMC_TYPE_MMC)
+			mmc_attach_mmc(host);
+		else
+			pr_err("%s: attach failed unknown card type\n",
+							mmc_hostname(host));
+	}
 }
 EXPORT_SYMBOL(mmc_wait_for_req);
 
@@ -1343,6 +1354,7 @@ int mmc_set_signal_voltage(struct mmc_host *host, int signal_voltage)
 	u32 clock;
 
 	BUG_ON(!host);
+	mmc_host_clk_hold(host);
 
 	/*
 	 * Send CMD11 only if the request is to switch the card to
@@ -1367,12 +1379,13 @@ int mmc_set_signal_voltage(struct mmc_host *host, int signal_voltage)
 
 	err = mmc_wait_for_cmd(host, &cmd, 0);
 	if (err)
-		return err;
+		goto eout;
 
-	if (!mmc_host_is_spi(host) && (cmd.resp[0] & R1_ERROR))
-		return -EIO;
+	if (!mmc_host_is_spi(host) && (cmd.resp[0] & R1_ERROR)) {
+		err = -EIO;
+		goto eout;
+	}
 
-	mmc_host_clk_hold(host);
 	/*
 	 * The card should drive cmd and dat[0:3] low immediately
 	 * after the response of cmd11, but wait 1 ms to be sure
@@ -1421,6 +1434,7 @@ power_cycle:
 		mmc_power_cycle(host);
 	}
 
+eout:
 	mmc_host_clk_release(host);
 
 	return err;
@@ -1485,8 +1499,13 @@ static void mmc_power_up(struct mmc_host *host)
 	host->ios.timing = MMC_TIMING_LEGACY;
 	mmc_set_ios(host);
 
-	/* Set signal voltage to 3.3V */
-	__mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_330);
+	/* Try to set signal voltage to 3.3V but fall back to 1.8v or 1.2v */
+	if (__mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_330) == 0)
+		dev_dbg(mmc_dev(host), "Initial signal voltage of 3.3v\n");
+	else if (__mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180) == 0)
+		dev_dbg(mmc_dev(host), "Initial signal voltage of 1.8v\n");
+	else if (__mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_120) == 0)
+		dev_dbg(mmc_dev(host), "Initial signal voltage of 1.2v\n");
 
 	/*
 	 * This delay should be sufficient to allow the power supply
@@ -2809,8 +2828,14 @@ static int __init mmc_init(void)
 	if (ret)
 		goto unregister_host_class;
 
+	ret = mmc_register_key_type();
+	if (ret)
+		goto unregister_sdio;
+
 	return 0;
 
+unregister_sdio:
+	sdio_unregister_bus();
 unregister_host_class:
 	mmc_unregister_host_class();
 unregister_bus:
@@ -2823,6 +2848,7 @@ destroy_workqueue:
 
 static void __exit mmc_exit(void)
 {
+	mmc_unregister_key_type();
 	sdio_unregister_bus();
 	mmc_unregister_host_class();
 	mmc_unregister_bus();
