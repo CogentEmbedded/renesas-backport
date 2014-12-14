@@ -32,6 +32,7 @@ struct sh_dmae_chan {
 	char dev_id[16];		/* unique name per DMAC of channel */
 	int pm_error;
 	dma_addr_t slave_addr;
+	u32 last_chcr;
 };
 
 struct sh_dmae_device {
@@ -46,8 +47,8 @@ struct sh_dmae_device {
 };
 
 struct sh_dmae_regs {
-	u32 sar; /* SAR / source address */
-	u32 dar; /* DAR / destination address */
+	dma_addr_t sar; /* SAR / source address */
+	dma_addr_t dar; /* DAR / destination address */
 	u32 tcr; /* TCR / transfer count */
 };
 
