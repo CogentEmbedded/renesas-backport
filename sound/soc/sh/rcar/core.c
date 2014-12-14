@@ -282,6 +282,7 @@ static void rsnd_dma_of_path(struct rsnd_dma *dma,
 	for (i = 1; i < MOD_MAX; i++) {
 		if (!src) {
 			mod[i] = ssi;
+			break;
 		} else if (!dvc) {
 			mod[i] = src;
 			src = NULL;
@@ -298,9 +299,6 @@ static void rsnd_dma_of_path(struct rsnd_dma *dma,
 
 		if (mod[i] == this)
 			index = i;
-
-		if (mod[i] == ssi)
-			break;
 	}
 
 	if (is_play) {
@@ -886,8 +884,7 @@ static int rsnd_dai_probe(struct platform_device *pdev,
 static struct snd_pcm_hardware rsnd_pcm_hardware = {
 	.info =		SNDRV_PCM_INFO_INTERLEAVED	|
 			SNDRV_PCM_INFO_MMAP		|
-			SNDRV_PCM_INFO_MMAP_VALID	|
-			SNDRV_PCM_INFO_PAUSE,
+			SNDRV_PCM_INFO_MMAP_VALID,
 	.buffer_bytes_max	= 64 * 1024,
 	.period_bytes_min	= 32,
 	.period_bytes_max	= 8192,
@@ -1028,6 +1025,12 @@ static int rsnd_probe(struct platform_device *pdev)
 	priv->info	= info;
 	spin_lock_init(&priv->lock);
 
+	priv->ssi_clk	= devm_clk_get(dev, "ssi");
+	priv->scu_clk	= devm_clk_get(dev, "scu");
+
+	clk_prepare_enable(priv->ssi_clk);
+	clk_prepare_enable(priv->scu_clk);
+
 	/*
 	 *	init each module
 	 */
@@ -1067,6 +1070,9 @@ static int rsnd_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 
+	clk_disable_unprepare(priv->scu_clk);
+	clk_disable_unprepare(priv->ssi_clk);
+
 	dev_info(dev, "probed\n");
 	return ret;
 
@@ -1097,10 +1103,37 @@ static int rsnd_remove(struct platform_device *pdev)
 	return ret;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int rsnd_runtime_suspend(struct device *dev)
+{
+	struct rsnd_priv *priv = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(priv->scu_clk);
+	clk_disable_unprepare(priv->ssi_clk);
+
+	return 0;
+}
+
+static int rsnd_runtime_resume(struct device *dev)
+{
+	struct rsnd_priv *priv = dev_get_drvdata(dev);
+
+	clk_prepare_enable(priv->ssi_clk);
+	clk_prepare_enable(priv->scu_clk);
+
+	return 0;
+}
+#endif	/* CONFIG_PM_RUNTIME */
+
+static struct dev_pm_ops rsnd_pm_ops = {
+	SET_RUNTIME_PM_OPS(rsnd_runtime_suspend, rsnd_runtime_resume, NULL)
+};
+
 static struct platform_driver rsnd_driver = {
 	.driver	= {
 		.name	= "rcar_sound",
 		.of_match_table = rsnd_of_match,
+		.pm	= &rsnd_pm_ops,
 	},
 	.probe		= rsnd_probe,
 	.remove		= rsnd_remove,
