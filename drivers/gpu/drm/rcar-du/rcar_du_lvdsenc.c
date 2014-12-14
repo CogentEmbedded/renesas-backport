@@ -1,7 +1,7 @@
 /*
  * rcar_du_lvdsenc.c  --  R-Car Display Unit LVDS Encoder
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -16,11 +16,16 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <drm/drm_encoder_slave.h>
 
 #include "rcar_du_drv.h"
 #include "rcar_du_encoder.h"
 #include "rcar_du_lvdsenc.h"
 #include "rcar_lvds_regs.h"
+
+#ifdef R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND
+static DEFINE_SPINLOCK(lvdsenc_lock);
+#endif
 
 struct rcar_du_lvdsenc {
 	struct rcar_du_device *dev;
@@ -38,17 +43,37 @@ static void rcar_lvds_write(struct rcar_du_lvdsenc *lvds, u32 reg, u32 data)
 	iowrite32(data, lvds->mmio + reg);
 }
 
-static int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
+int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
 				 struct rcar_du_crtc *rcrtc)
 {
 	const struct drm_display_mode *mode = &rcrtc->crtc.mode;
 	unsigned int freq = mode->clock;
 	u32 lvdcr0;
+	u32 lvdhcr;
 	u32 pllcr;
 	int ret;
+#ifdef R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND
+	unsigned long flags;
+	unsigned int wait_loop, i;
+#endif
 
 	if (lvds->dpms == DRM_MODE_DPMS_ON)
 		return 0;
+
+	rcrtc->lvds_ch = lvds->index;
+
+	/* software reset release */
+	if ((lvds->dev->info->lvds0_crtc) || (lvds->dev->info->lvds1_crtc)) {
+		void __iomem *srstclr7_reg;
+		u32 srstclr7_lvds = 0;
+		if (lvds->dev->info->lvds0_crtc & (0x01 << rcrtc->index))
+			srstclr7_lvds |= SRCR7_LVDS0;
+		if (lvds->dev->info->lvds1_crtc & (0x01 << rcrtc->index))
+			srstclr7_lvds |= SRCR7_LVDS1;
+		srstclr7_reg = ioremap_nocache(SRSTCLR7_REGISTER, 0x04);
+		writel_relaxed(srstclr7_lvds, srstclr7_reg);
+		iounmap(srstclr7_reg);
+	}
 
 	ret = clk_prepare_enable(lvds->clock);
 	if (ret < 0)
@@ -72,15 +97,24 @@ static int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
 	 * VSYNC -> CTRL1
 	 * DISP  -> CTRL2
 	 * 0     -> CTRL3
-	 *
-	 * Channels 1 and 3 are switched on ES1.
 	 */
 	rcar_lvds_write(lvds, LVDCTRCR, LVDCTRCR_CTR3SEL_ZERO |
 			LVDCTRCR_CTR2SEL_DISP | LVDCTRCR_CTR1SEL_VSYNC |
 			LVDCTRCR_CTR0SEL_HSYNC);
-	rcar_lvds_write(lvds, LVDCHCR,
-			LVDCHCR_CHSEL_CH(0, 0) | LVDCHCR_CHSEL_CH(1, 3) |
-			LVDCHCR_CHSEL_CH(2, 2) | LVDCHCR_CHSEL_CH(3, 1));
+
+#ifdef R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND
+	if (rcar_du_needs(lvds->dev, RCAR_DU_QUIRK_LVDS_LANES))
+		lvdhcr = LVDCHCR_CHSEL_CH(0, 0) | LVDCHCR_CHSEL_CH(1, 3)
+		       | LVDCHCR_CHSEL_CH(2, 2) | LVDCHCR_CHSEL_CH(3, 1);
+	else
+		lvdhcr = LVDCHCR_CHSEL_CH(0, 0) | LVDCHCR_CHSEL_CH(1, 1)
+		       | LVDCHCR_CHSEL_CH(2, 2) | LVDCHCR_CHSEL_CH(3, 3);
+#else
+	lvdhcr = LVDCHCR_CHSEL_CH(0, 0) | LVDCHCR_CHSEL_CH(1, 1)
+	       | LVDCHCR_CHSEL_CH(2, 2) | LVDCHCR_CHSEL_CH(3, 3);
+#endif
+
+	rcar_lvds_write(lvds, LVDCHCR, lvdhcr);
 
 	/* Select the input, hardcode mode 0, enable LVDS operation and turn
 	 * bias circuitry on.
@@ -90,6 +124,62 @@ static int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
 		lvdcr0 |= LVDCR0_DUSEL;
 	rcar_lvds_write(lvds, LVDCR0, lvdcr0);
 
+#ifdef R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND
+	if (rcar_du_needs(rcrtc->group->dev, RCAR_DU_QUIRK_LVDS_CH_DATA_GAP)) {
+		/* caluculate waiting loop number */
+		if (freq < 61000)
+			wait_loop = WAIT_PS_TIME_UNDER_61MHZ /
+				 rcrtc->group->dev->info->cpu_clk_time_ps;
+		else if (freq <= 121000)
+			wait_loop = WAIT_PS_TIME_UPPER_61MHZ /
+				 rcrtc->group->dev->info->cpu_clk_time_ps;
+		else
+			wait_loop = WAIT_PS_TIME_UPPER_121MHZ /
+				 rcrtc->group->dev->info->cpu_clk_time_ps;
+
+		/* Turn the PLL on, wait for the startup delay,
+			 and turn the output on. */
+		lvdcr0 |= LVDCR0_PLLEN;
+		rcar_lvds_write(lvds, LVDCR0, lvdcr0);
+
+		usleep_range(100, 150);
+
+		/* 1 loop is three CPU instruction and CPU 3way superscalar */
+		wait_loop = wait_loop / 3 * 3;
+
+		lvdcr0 |= LVDCR0_LVRES;
+
+		spin_lock_irqsave(&lvdsenc_lock, flags);
+
+		writel_relaxed(lvdcr0, lvds->mmio + LVDCR0);
+
+		/* Waiting for workaround */
+		for (i = 0; i < wait_loop; i++)
+			asm("nop");
+
+		/* Turn all the channels on. */
+		writel_relaxed(LVDCR1_CHSTBY(3) | LVDCR1_CHSTBY(2) |
+			       LVDCR1_CHSTBY(1) | LVDCR1_CHSTBY(0) |
+			       LVDCR1_CLKSTBY, lvds->mmio + LVDCR1);
+
+		spin_unlock_irqrestore(&lvdsenc_lock, flags);
+	} else {
+		/* Turn all the channels on. */
+		rcar_lvds_write(lvds, LVDCR1, LVDCR1_CHSTBY(3) |
+				 LVDCR1_CHSTBY(2) | LVDCR1_CHSTBY(1) |
+				 LVDCR1_CHSTBY(0) | LVDCR1_CLKSTBY);
+
+		/* Turn the PLL on, wait for the startup delay,
+			 and turn the output on. */
+		lvdcr0 |= LVDCR0_PLLEN;
+		rcar_lvds_write(lvds, LVDCR0, lvdcr0);
+
+		usleep_range(100, 150);
+
+		lvdcr0 |= LVDCR0_LVRES;
+		rcar_lvds_write(lvds, LVDCR0, lvdcr0);
+	}
+#else
 	/* Turn all the channels on. */
 	rcar_lvds_write(lvds, LVDCR1, LVDCR1_CHSTBY(3) | LVDCR1_CHSTBY(2) |
 			LVDCR1_CHSTBY(1) | LVDCR1_CHSTBY(0) | LVDCR1_CLKSTBY);
@@ -104,22 +194,53 @@ static int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
 
 	lvdcr0 |= LVDCR0_LVRES;
 	rcar_lvds_write(lvds, LVDCR0, lvdcr0);
+#endif
 
 	lvds->dpms = DRM_MODE_DPMS_ON;
 	return 0;
 }
 
-static void rcar_du_lvdsenc_stop(struct rcar_du_lvdsenc *lvds)
+int rcar_du_lvdsenc_stop_suspend(struct rcar_du_lvdsenc *lvds)
 {
 	if (lvds->dpms == DRM_MODE_DPMS_OFF)
-		return;
+		return -1;
 
 	rcar_lvds_write(lvds, LVDCR0, 0);
 	rcar_lvds_write(lvds, LVDCR1, 0);
 
 	clk_disable_unprepare(lvds->clock);
 
+	/* software reset */
+	if ((lvds->dev->info->lvds0_crtc) || (lvds->dev->info->lvds1_crtc)) {
+		void __iomem *srcr7_reg;
+		u32 srcr7_lvds = 0;
+		if (lvds->index == 0)
+			srcr7_lvds |= SRCR7_LVDS0;
+		if (lvds->index == 1)
+			srcr7_lvds |= SRCR7_LVDS1;
+		srcr7_reg = ioremap_nocache(SRCR7_REGISTER, 0x04);
+		writel_relaxed(readl_relaxed(srcr7_reg) |
+			       srcr7_lvds, srcr7_reg);
+		iounmap(srcr7_reg);
+	}
+
 	lvds->dpms = DRM_MODE_DPMS_OFF;
+
+	return 0;
+}
+
+void rcar_du_lvdsenc_stop(struct rcar_du_lvdsenc *lvds)
+{
+	int ret;
+	unsigned int i;
+
+	ret = rcar_du_lvdsenc_stop_suspend(lvds);
+	if (ret < 0)
+		return;
+
+	for (i = 0; i < lvds->dev->pdata->num_crtcs; ++i)
+		if (lvds->index == lvds->dev->crtcs[i].lvds_ch)
+			lvds->dev->crtcs[i].lvds_ch = -1;
 }
 
 int rcar_du_lvdsenc_dpms(struct rcar_du_lvdsenc *lvds,

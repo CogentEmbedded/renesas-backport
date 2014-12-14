@@ -1,7 +1,7 @@
 /*
  * rcar_du_plane.c  --  R-Car Display Unit Planes
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -18,9 +18,76 @@
 #include <drm/drm_gem_cma_helper.h>
 
 #include "rcar_du_drv.h"
+#include "rcar_du_group.h"
 #include "rcar_du_kms.h"
 #include "rcar_du_plane.h"
 #include "rcar_du_regs.h"
+
+/* -----------------------------------------------------------------------------
+ * Live Sources
+ */
+
+struct rcar_du_vsp1_source {
+	struct drm_live_source base;
+
+	enum rcar_du_plane_source source;
+};
+
+static inline struct rcar_du_vsp1_source *
+to_rcar_vsp1_source(struct drm_live_source *src)
+{
+	return container_of(src, struct rcar_du_vsp1_source, base);
+}
+
+static const struct drm_live_source_funcs rcar_du_live_source_funcs = {
+	.destroy = drm_live_source_cleanup,
+};
+
+static const uint32_t source_formats[] = {
+	DRM_FORMAT_XRGB8888,
+};
+
+int rcar_du_vsp1_sources_init(struct rcar_du_device *rcdu)
+{
+	static const struct {
+		enum rcar_du_plane_source source;
+		unsigned int planes;
+	} sources[] = {
+		{ RCAR_DU_PLANE_VSPD0, BIT(RCAR_DU01_NUM_KMS_PLANES - 1) },
+		{ RCAR_DU_PLANE_VSPD1, BIT(RCAR_DU01_NUM_KMS_PLANES - 2) |
+				       BIT(2 * RCAR_DU2_NUM_KMS_PLANES - 2) },
+	};
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(sources); ++i) {
+		struct rcar_du_vsp1_source *src;
+		char name[6];
+		int ret;
+
+		if ((rcdu->info->vspd_crtc & (0x01 << i)) == 0)
+			continue;
+
+		src = devm_kzalloc(rcdu->dev, sizeof(*src), GFP_KERNEL);
+		if (src == NULL)
+			return -ENOMEM;
+
+		src->source = sources[i].source;
+
+		sprintf(name, "vspd%u", i);
+		ret = drm_live_source_init(rcdu->ddev, &src->base, name,
+					   sources[i].planes, source_formats,
+					   ARRAY_SIZE(source_formats),
+					   &rcar_du_live_source_funcs);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * Planes
+ */
 
 #define RCAR_DU_COLORKEY_NONE		(0 << 24)
 #define RCAR_DU_COLORKEY_SOURCE		(1 << 24)
@@ -36,13 +103,6 @@ static inline struct rcar_du_plane *to_rcar_plane(struct drm_plane *plane)
 	return container_of(plane, struct rcar_du_kms_plane, plane)->hwplane;
 }
 
-static u32 rcar_du_plane_read(struct rcar_du_group *rgrp,
-			      unsigned int index, u32 reg)
-{
-	return rcar_du_read(rgrp->dev,
-			    rgrp->mmio_offset + index * PLANE_OFF + reg);
-}
-
 static void rcar_du_plane_write(struct rcar_du_group *rgrp,
 				unsigned int index, u32 reg, u32 data)
 {
@@ -50,38 +110,84 @@ static void rcar_du_plane_write(struct rcar_du_group *rgrp,
 		      data);
 }
 
-int rcar_du_plane_reserve(struct rcar_du_plane *plane,
-			  const struct rcar_du_format_info *format)
+/*
+ * The R8A7790 DU can source frames directly from the VSP1 devices VSPD0 and
+ * VSPD1. VSPD0 feeds DU0/1 plane 0, and VSPD1 feeds either DU2 plane 0 or
+ * DU0/1 plane 1.
+ *
+ * Allocate the correct fixed plane when sourcing frames from VSPD0 or VSPD1,
+ * and allocate planes in reverse index order otherwise to ensure maximum
+ * availability of planes 0 and 1.
+ *
+ * The caller is responsible for ensuring that the requested source is
+ * compatible with the DU revision.
+ */
+static int rcar_du_plane_find(struct rcar_du_group *rgrp, unsigned int count,
+			      enum rcar_du_plane_source source)
 {
-	struct rcar_du_group *rgrp = plane->group;
-	unsigned int i;
-	int ret = -EBUSY;
+	int fixed = -1;
+	int i;
 
-	mutex_lock(&rgrp->planes.lock);
+	if (source == RCAR_DU_PLANE_VSPD0) {
+		/* VSPD0 feeds plane 0 on DU0/1. */
+		if (rgrp->index != 0)
+			return -EINVAL;
 
-	for (i = 0; i < ARRAY_SIZE(rgrp->planes.planes); ++i) {
+		fixed = 0;
+	} else if (source == RCAR_DU_PLANE_VSPD1) {
+		/* VSPD1 feeds plane 1 on DU0/1 or plane 0 on DU2. */
+		fixed = rgrp->index == 0 ? 1 : 0;
+	}
+
+	if (fixed >= 0)
+		return rgrp->planes.free & (1 << fixed) ? fixed : -EBUSY;
+
+	for (i = ARRAY_SIZE(rgrp->planes.planes) - 1; i >= 0; --i) {
 		if (!(rgrp->planes.free & (1 << i)))
 			continue;
 
-		if (format->planes == 1 ||
+		if (count == 1 ||
 		    rgrp->planes.free & (1 << ((i + 1) % 8)))
 			break;
 	}
 
-	if (i == ARRAY_SIZE(rgrp->planes.planes))
+	return i < 0 ? -EBUSY : i;
+}
+
+static int __rcar_du_plane_reserve(struct rcar_du_plane *plane,
+				   const struct rcar_du_format_info *format,
+				   enum rcar_du_plane_source source)
+{
+	struct rcar_du_group *rgrp = plane->group;
+	unsigned int hwindex;
+	int ret;
+
+	mutex_lock(&rgrp->planes.lock);
+
+	ret = rcar_du_plane_find(rgrp, format->planes, source);
+	if (ret < 0)
 		goto done;
 
-	rgrp->planes.free &= ~(1 << i);
-	if (format->planes == 2)
-		rgrp->planes.free &= ~(1 << ((i + 1) % 8));
+	hwindex = ret;
 
-	plane->hwindex = i;
+	rgrp->planes.free &= ~(1 << hwindex);
+	if (format->planes == 2)
+		rgrp->planes.free &= ~(1 << ((hwindex + 1) % 8));
+
+	plane->hwindex = hwindex;
+	plane->source = source;
 
 	ret = 0;
 
 done:
 	mutex_unlock(&rgrp->planes.lock);
 	return ret;
+}
+
+int rcar_du_plane_reserve(struct rcar_du_plane *plane,
+			  const struct rcar_du_format_info *format)
+{
+	return __rcar_du_plane_reserve(plane, format, RCAR_DU_PLANE_MEMORY);
 }
 
 void rcar_du_plane_release(struct rcar_du_plane *plane)
@@ -104,6 +210,18 @@ void rcar_du_plane_update_base(struct rcar_du_plane *plane)
 {
 	struct rcar_du_group *rgrp = plane->group;
 	unsigned int index = plane->hwindex;
+	u32 mwr;
+
+	/* Memory pitch (expressed in pixels) */
+	if (plane->format->planes == 2)
+		mwr = plane->pitch;
+	else
+		mwr = plane->pitch * 8 / plane->format->bpp;
+
+	if ((plane->interlace_flag) && (plane->format->bpp == 32))
+		rcar_du_plane_write(rgrp, index, PnMWR, mwr * 2);
+	else
+		rcar_du_plane_write(rgrp, index, PnMWR, mwr);
 
 	/* The Y position is expressed in raster line units and must be doubled
 	 * for 32bpp formats, according to the R8A7790 datasheet. No mention of
@@ -114,8 +232,10 @@ void rcar_du_plane_update_base(struct rcar_du_plane *plane)
 	 * require a halved Y position value.
 	 */
 	rcar_du_plane_write(rgrp, index, PnSPXR, plane->src_x);
-	rcar_du_plane_write(rgrp, index, PnSPYR, plane->src_y *
-			    (plane->format->bpp == 32 ? 2 : 1));
+	if ((!plane->interlace_flag) && (plane->format->bpp == 32))
+		rcar_du_plane_write(rgrp, index, PnSPYR, plane->src_y * 2);
+	else
+		rcar_du_plane_write(rgrp, index, PnSPYR, plane->src_y);
 	rcar_du_plane_write(rgrp, index, PnDSA0R, plane->dma[0]);
 
 	if (plane->format->planes == 2) {
@@ -133,6 +253,8 @@ void rcar_du_plane_compute_base(struct rcar_du_plane *plane,
 {
 	struct drm_gem_cma_object *gem;
 
+	plane->pitch = fb->pitches[0];
+
 	gem = drm_fb_cma_get_gem_obj(fb, 0);
 	plane->dma[0] = gem->paddr + fb->offsets[0];
 
@@ -148,23 +270,42 @@ static void rcar_du_plane_setup_mode(struct rcar_du_plane *plane,
 	struct rcar_du_group *rgrp = plane->group;
 	u32 colorkey;
 	u32 pnmr;
+	u32 alpha_bit;
 
-	/* The PnALPHAR register controls alpha-blending in 16bpp formats
-	 * (ARGB1555 and XRGB1555).
+	/* The PnALPHAR register controls alpha-blending in formats
+	 * (XRGB0565, XRGB1555, ARGB1555 and XRGB8888)
+	 * by setting the alpha value.
 	 *
-	 * For ARGB, set the alpha value to 0, and enable alpha-blending when
-	 * the A bit is 0. This maps A=0 to alpha=0 and A=1 to alpha=255.
+	 * For ARGB1555, set the alpha value from 0 to 255, and enable
+	 * the pixel alpha-blending when the value of A bit is 0 or 1.
+	 * The pixel alpha-blending by the A bit depends on setting the config
+	 * of DRM_RCAR_ALPHA_BIT_ARGB1555
+	 *
+	 * For ARGB8888, set the value of the A bit from 0 to 255, and enable
+	 * the pixel alpha-blending. A=0 is transparent.
+	 * A=128 is semi-transparent. A=255 is non-transparent.
 	 *
 	 * For XRGB, set the alpha value to the plane-wide alpha value and
 	 * enable alpha-blending regardless of the X bit value.
 	 */
-	if (plane->format->fourcc != DRM_FORMAT_XRGB1555)
-		rcar_du_plane_write(rgrp, index, PnALPHAR, PnALPHAR_ABIT_0);
+	if (CONFIG_DRM_RCAR_ALPHA_BIT_ARGB1555 == 1)
+		alpha_bit = PnALPHAR_ABIT_1;
+	else
+		alpha_bit = PnALPHAR_ABIT_0;
+
+	if (plane->format->fourcc == DRM_FORMAT_ARGB1555)
+		rcar_du_plane_write(rgrp, index, PnALPHAR,
+				    alpha_bit | plane->alpha);
 	else
 		rcar_du_plane_write(rgrp, index, PnALPHAR,
 				    PnALPHAR_ABIT_X | plane->alpha);
 
-	pnmr = PnMR_BM_MD | plane->format->pnmr;
+	/* Disable alpha blending of lowest plane */
+	if (plane->fb_plane == true)
+		pnmr = PnMR_BM_MD | ((plane->format->pnmr) & ~PnMR_SPIM_MASK) |
+		       PnMR_SPIM_TP_OFF;
+	else
+		pnmr = PnMR_BM_MD | plane->format->pnmr;
 
 	/* Disable color keying when requested. YUV formats have the
 	 * PnMR_SPIM_TP_OFF bit set in their pnmr field, disabling color keying
@@ -216,10 +357,6 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 	 * The data format is selected by the DDDF field in PnMR and the EDF
 	 * field in DDCR4.
 	 */
-	ddcr4 = rcar_du_plane_read(rgrp, index, PnDDCR4);
-	ddcr4 &= ~PnDDCR4_EDF_MASK;
-	ddcr4 |= plane->format->edf | PnDDCR4_CODE;
-
 	rcar_du_plane_setup_mode(plane, index);
 
 	if (plane->format->planes == 2) {
@@ -238,6 +375,11 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 	}
 
 	rcar_du_plane_write(rgrp, index, PnDDCR2, ddcr2);
+
+	ddcr4 = plane->format->edf | PnDDCR4_CODE;
+	if (plane->source != RCAR_DU_PLANE_MEMORY)
+		ddcr4 |= PnDDCR4_VSPS;
+
 	rcar_du_plane_write(rgrp, index, PnDDCR4, ddcr4);
 
 	/* Memory pitch (expressed in pixels) */
@@ -246,7 +388,10 @@ static void __rcar_du_plane_setup(struct rcar_du_plane *plane,
 	else
 		mwr = plane->pitch * 8 / plane->format->bpp;
 
-	rcar_du_plane_write(rgrp, index, PnMWR, mwr);
+	if ((plane->interlace_flag) && (plane->format->bpp == 32))
+		rcar_du_plane_write(rgrp, index, PnMWR, mwr * 2);
+	else
+		rcar_du_plane_write(rgrp, index, PnMWR, mwr);
 
 	/* Destination position and size */
 	rcar_du_plane_write(rgrp, index, PnDSXR, plane->width);
@@ -272,21 +417,29 @@ void rcar_du_plane_setup(struct rcar_du_plane *plane)
 
 static int
 rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
-		       struct drm_framebuffer *fb, int crtc_x, int crtc_y,
+		       struct drm_framebuffer *fb, struct drm_live_source *src,
+		       int crtc_x, int crtc_y,
 		       unsigned int crtc_w, unsigned int crtc_h,
 		       uint32_t src_x, uint32_t src_y,
 		       uint32_t src_w, uint32_t src_h)
 {
 	struct rcar_du_plane *rplane = to_rcar_plane(plane);
 	struct rcar_du_device *rcdu = rplane->group->dev;
+	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
 	const struct rcar_du_format_info *format;
+	enum rcar_du_plane_source source;
+	uint32_t pixel_format;
 	unsigned int nplanes;
+	bool source_changed;
 	int ret;
+	unsigned int value;
 
-	format = rcar_du_format_info(fb->pixel_format);
+	pixel_format = fb ? fb->pixel_format : src->pixel_format;
+
+	format = rcar_du_format_info(pixel_format);
 	if (format == NULL) {
 		dev_dbg(rcdu->dev, "%s: unsupported format %08x\n", __func__,
-			fb->pixel_format);
+			pixel_format);
 		return -EINVAL;
 	}
 
@@ -297,19 +450,34 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 
 	nplanes = rplane->format ? rplane->format->planes : 0;
 
-	/* Reallocate hardware planes if the number of required planes has
-	 * changed.
+	/* Check whether the source has changed from memory to live source or
+	 * from live source to memory. The source will be configured by the VSPS
+	 * bit in the PnDDCR4 register. Although the datasheet states that the
+	 * bit is updated during vertical blanking, it seems that updates only
+	 * occur when the DU group is held in reset through the DSYSR.DRES bit.
+	 * We thus need to restart the group if the source changes.
 	 */
-	if (format->planes != nplanes) {
+	if (src)
+		source = to_rcar_vsp1_source(src)->source;
+	else
+		source = RCAR_DU_PLANE_MEMORY;
+
+	source_changed = (rplane->source == RCAR_DU_PLANE_MEMORY) !=
+			 (source == RCAR_DU_PLANE_MEMORY);
+
+	/* Reallocate hardware planes if the source or the number of required
+	 * planes has changed.
+	 */
+	if (format->planes != nplanes || rplane->source != source) {
 		rcar_du_plane_release(rplane);
-		ret = rcar_du_plane_reserve(rplane, format);
+		ret = __rcar_du_plane_reserve(rplane, format, source);
 		if (ret < 0)
 			return ret;
 	}
 
 	rplane->crtc = crtc;
 	rplane->format = format;
-	rplane->pitch = fb->pitches[0];
+	rplane->pitch = fb ? fb->pitches[0] : (src_w >> 16) * format->bpp / 8;
 
 	rplane->src_x = src_x >> 16;
 	rplane->src_y = src_y >> 16;
@@ -318,12 +486,57 @@ rcar_du_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	rplane->width = crtc_w;
 	rplane->height = crtc_h;
 
-	rcar_du_plane_compute_base(rplane, fb);
+	if (fb) {
+		rcar_du_plane_compute_base(rplane, fb);
+	} else {
+		rplane->dma[0] = 0;
+		rplane->dma[1] = 0;
+	}
+
+	if (source == RCAR_DU_PLANE_VSPD1) {
+		unsigned int vspd1_sink = rplane->group->index ? 2 : 0;
+
+		if (rcdu->vspd1_sink != vspd1_sink) {
+			rcdu->vspd1_sink = vspd1_sink;
+			rcar_du_set_dpad0_vsp1_routing(rcdu);
+		}
+	}
+
+	if (crtc->mode.flags & DRM_MODE_FLAG_INTERLACE)
+		rplane->interlace_flag = true;
+	else
+		rplane->interlace_flag = false;
 	rcar_du_plane_setup(rplane);
 
 	mutex_lock(&rplane->group->planes.lock);
+
+	/* If the source has changed we will need to restart the group for the
+	 * change to take effect. Set the need_restart flag and proceed to
+	 * update the planes. The update function might restart the group, in
+	 * which case the need_restart flag will be cleared. If the flag is
+	 * still set, force a group restart.
+	 */
+
+	if (source_changed)
+		rplane->group->planes.need_restart = true;
+
 	rplane->enabled = true;
 	rcar_du_crtc_update_planes(rplane->crtc);
+
+	if (rplane->group->planes.need_restart)
+		rcar_du_group_restart(rplane->group);
+
+	if (rplane->group->index == 1)
+		value = DU_CH_2;
+	else {
+		if (rcrtc->dptsr_read & (1 << rplane->hwindex))
+			value = DU_CH_1;
+		else
+			value = DU_CH_0;
+	}
+	drm_object_property_set_value(&plane->base,
+				  rplane->group->planes.channel, value);
+
 	mutex_unlock(&rplane->group->planes.lock);
 
 	return 0;
@@ -359,7 +572,12 @@ static void rcar_du_plane_set_alpha(struct rcar_du_plane *plane, u32 alpha)
 		return;
 
 	plane->alpha = alpha;
-	if (!plane->enabled || plane->format->fourcc != DRM_FORMAT_XRGB1555)
+	if ((!plane->enabled) || (plane->format->fourcc == DRM_FORMAT_ARGB8888)
+			      || (plane->format->fourcc == DRM_FORMAT_UYVY)
+			      || (plane->format->fourcc == DRM_FORMAT_YUYV)
+			      || (plane->format->fourcc == DRM_FORMAT_NV12)
+			      || (plane->format->fourcc == DRM_FORMAT_NV21)
+			      || (plane->format->fourcc == DRM_FORMAT_NV16))
 		return;
 
 	rcar_du_plane_setup_mode(plane, plane->hwindex);
@@ -421,7 +639,7 @@ static const struct drm_plane_funcs rcar_du_plane_funcs = {
 	.destroy = drm_plane_cleanup,
 };
 
-static const uint32_t formats[] = {
+static const uint32_t plane_formats[] = {
 	DRM_FORMAT_RGB565,
 	DRM_FORMAT_ARGB1555,
 	DRM_FORMAT_XRGB1555,
@@ -432,6 +650,15 @@ static const uint32_t formats[] = {
 	DRM_FORMAT_NV12,
 	DRM_FORMAT_NV21,
 	DRM_FORMAT_NV16,
+};
+
+static const struct drm_prop_enum_list rcar_du0_du1_info_enum_list[] = {
+	{ DU_CH_0, "channel0" },
+	{ DU_CH_1, "channel1" },
+};
+
+static const struct drm_prop_enum_list rcar_du2_info_enum_list[] = {
+	{ DU_CH_2, "channel2" },
 };
 
 int rcar_du_planes_init(struct rcar_du_group *rgrp)
@@ -463,11 +690,28 @@ int rcar_du_planes_init(struct rcar_du_group *rgrp)
 	if (planes->zpos == NULL)
 		return -ENOMEM;
 
+	if (rgrp->index == 1)
+		planes->channel = drm_property_create_enum(
+				 rcdu->ddev, DRM_MODE_PROP_IMMUTABLE,
+				 "channel",
+				 rcar_du2_info_enum_list,
+				 ARRAY_SIZE(rcar_du2_info_enum_list));
+	else
+		planes->channel = drm_property_create_enum(
+				 rcdu->ddev, DRM_MODE_PROP_IMMUTABLE,
+				 "channel",
+				 rcar_du0_du1_info_enum_list,
+				 ARRAY_SIZE(rcar_du0_du1_info_enum_list));
+
+	if (planes->channel == NULL)
+		return -ENOMEM;
+
 	for (i = 0; i < ARRAY_SIZE(planes->planes); ++i) {
 		struct rcar_du_plane *plane = &planes->planes[i];
 
 		plane->group = rgrp;
 		plane->hwindex = -1;
+		plane->source = RCAR_DU_PLANE_MEMORY;
 		plane->alpha = 255;
 		plane->colorkey = RCAR_DU_COLORKEY_NONE;
 		plane->zpos = 0;
@@ -483,10 +727,17 @@ int rcar_du_planes_register(struct rcar_du_group *rgrp)
 	unsigned int crtcs;
 	unsigned int i;
 	int ret;
+	unsigned int plane_num;
+	unsigned int dptsr_ch;
+
+	if (rgrp->index == 1)
+		plane_num = RCAR_DU2_NUM_KMS_PLANES;
+	else
+		plane_num = RCAR_DU01_NUM_KMS_PLANES;
 
 	crtcs = ((1 << rcdu->num_crtcs) - 1) & (3 << (2 * rgrp->index));
 
-	for (i = 0; i < RCAR_DU_NUM_KMS_PLANES; ++i) {
+	for (i = 0; i < plane_num; ++i) {
 		struct rcar_du_kms_plane *plane;
 
 		plane = devm_kzalloc(rcdu->dev, sizeof(*plane), GFP_KERNEL);
@@ -495,10 +746,12 @@ int rcar_du_planes_register(struct rcar_du_group *rgrp)
 
 		plane->hwplane = &planes->planes[i + 2];
 		plane->hwplane->zpos = 1;
+		plane->hwplane->fb_plane = false;
+		plane->hwplane->interlace_flag = false;
 
 		ret = drm_plane_init(rcdu->ddev, &plane->plane, crtcs,
-				     &rcar_du_plane_funcs, formats,
-				     ARRAY_SIZE(formats), false);
+				     &rcar_du_plane_funcs, plane_formats,
+				     ARRAY_SIZE(plane_formats), false);
 		if (ret < 0)
 			return ret;
 
@@ -509,6 +762,17 @@ int rcar_du_planes_register(struct rcar_du_group *rgrp)
 					   RCAR_DU_COLORKEY_NONE);
 		drm_object_attach_property(&plane->plane.base,
 					   planes->zpos, 1);
+		if (rgrp->index == 1)
+			dptsr_ch = DU_CH_2;
+		else {
+			if ((0x01 << ((plane_num - 1) - i)) &
+				CONFIG_DRM_RCAR_DU_OVERLAY_CH)
+				dptsr_ch = DU_CH_1;
+			else
+				dptsr_ch = DU_CH_0;
+		}
+		drm_object_attach_property(&plane->plane.base,
+					   planes->channel, dptsr_ch);
 	}
 
 	return 0;

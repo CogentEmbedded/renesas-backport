@@ -12,5 +12,41 @@ config DRM_RCAR_LVDS
 	bool "R-Car DU LVDS Encoder Support"
 	depends on DRM_RCAR_DU
 	help
-	  Enable support the R-Car Display Unit embedded LVDS encoders
-	  (currently only on R8A7790).
+	  Enable support LVDS encoders.
+
+	  If you want to access LVDS encoder, you select y.
+	  If you don't want to access LVDS encoder, you select n.
+
+config DRM_RCAR_DESKTOP_TURN_OFF
+	bool "R-Car DU turn off desktop layer"
+	depends on DRM_RCAR_DU
+	default n
+	help
+	  Choose this option if you want to turn off desktop layer.
+
+	  If you want to turn off desktop layer, you select y.
+	  If you want to turn on desktop layer, you select n.
+
+config DRM_RCAR_ALPHA_BIT_ARGB1555
+	int "R-Car DU alpha bit function of ARGB1555"
+	depends on DRM_RCAR_DU
+	range 0 1
+	help
+	  Choose this option if you select A bit function of ARGB1555.
+	  If you set value to 0, pixel alpha blending is performed
+	  when the value of A is 0.
+	  If you set value to 1, pixel alpha blending is performed
+	  when the value of A is 1.
+
+config DRM_RCAR_DU_OVERLAY_CH
+	hex "R-Car DU initial channel of overlay layers"
+	range 0 0x3f
+	depends on DRM_RCAR_DU
+	help
+	  The value of configuration indicates initial channel of
+	  overlay layers. Bit 0 shows overlay0 layer and it can
+	  set up from overlay0 layer to overlay5 layer.
+	  The initial channel of overlay layer is DU channel 0
+	  when the value of bit is set as "0".
+	  The initial channel of overlay layer is DU channel 1
+	  when the value of bit is set as "1".

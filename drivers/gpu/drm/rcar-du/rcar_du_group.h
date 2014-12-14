@@ -1,7 +1,7 @@
 /*
  * rcar_du_group.c  --  R-Car Display Unit Planes and CRTCs Group
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -36,6 +36,7 @@ struct rcar_du_group {
 	unsigned int used_crtcs;
 
 	struct rcar_du_planes planes;
+	bool interlace_grp;
 };
 
 u32 rcar_du_group_read(struct rcar_du_group *rgrp, u32 reg);
@@ -46,5 +47,7 @@ void rcar_du_group_put(struct rcar_du_group *rgrp);
 void rcar_du_group_start_stop(struct rcar_du_group *rgrp, bool start);
 void rcar_du_group_restart(struct rcar_du_group *rgrp);
 int rcar_du_group_set_routing(struct rcar_du_group *rgrp);
+
+int rcar_du_set_dpad0_vsp1_routing(struct rcar_du_device *rcdu);
 
 #endif /* __RCAR_DU_GROUP_H__ */

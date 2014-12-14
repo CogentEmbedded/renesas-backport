@@ -1,7 +1,7 @@
 /*
  * rcar_du_lvdsenc.h  --  R-Car Display Unit LVDS Encoder
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -18,6 +18,12 @@
 #include <linux/module.h>
 #include <linux/platform_data/rcar-du.h>
 
+#ifdef R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND
+#define WAIT_PS_TIME_UNDER_61MHZ	100000
+#define WAIT_PS_TIME_UPPER_61MHZ	50000
+#define WAIT_PS_TIME_UPPER_121MHZ	25000
+#endif
+
 struct rcar_drm_crtc;
 struct rcar_du_lvdsenc;
 
@@ -26,6 +32,11 @@ enum rcar_lvds_input {
 	RCAR_LVDS_INPUT_DU1,
 	RCAR_LVDS_INPUT_DU2,
 };
+
+int rcar_du_lvdsenc_start(struct rcar_du_lvdsenc *lvds,
+			  struct rcar_du_crtc *rcrtc);
+void rcar_du_lvdsenc_stop(struct rcar_du_lvdsenc *lvds);
+int rcar_du_lvdsenc_stop_suspend(struct rcar_du_lvdsenc *lvds);
 
 #if IS_ENABLED(CONFIG_DRM_RCAR_LVDS)
 int rcar_du_lvdsenc_init(struct rcar_du_device *rcdu);

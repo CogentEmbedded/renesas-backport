@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  * Copyright © 2006 Keith Packard
  * Copyright © 2007-2008 Dave Airlie
  * Copyright © 2007-2008 Intel Corporation
@@ -49,6 +50,7 @@ struct drm_clip_rect;
 #define DRM_MODE_OBJECT_FB 0xfbfbfbfb
 #define DRM_MODE_OBJECT_BLOB 0xbbbbbbbb
 #define DRM_MODE_OBJECT_PLANE 0xeeeeeeee
+#define DRM_MODE_OBJECT_LIVE_SOURCE 0xe1e1e1e1
 
 struct drm_mode_object {
 	uint32_t id;
@@ -311,6 +313,7 @@ struct drm_connector;
 struct drm_encoder;
 struct drm_pending_vblank_event;
 struct drm_plane;
+struct drm_live_source;
 
 /**
  * drm_crtc_funcs - control CRTCs for a given device
@@ -442,6 +445,10 @@ struct drm_crtc {
 	void *helper_private;
 
 	struct drm_object_properties properties;
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+	int flip_id;
+#endif
+	uint32_t connector_type;
 };
 
 
@@ -629,6 +636,9 @@ struct drm_connector {
 	int audio_latency[2];
 	int null_edid_counter; /* needed to workaround some HW bugs where we get all 0s */
 	unsigned bad_edid_counter;
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	int cmd_xres, cmd_yres;
+#endif
 };
 
 /**
@@ -641,6 +651,7 @@ struct drm_connector {
 struct drm_plane_funcs {
 	int (*update_plane)(struct drm_plane *plane,
 			    struct drm_crtc *crtc, struct drm_framebuffer *fb,
+			    struct drm_live_source *src,
 			    int crtc_x, int crtc_y,
 			    unsigned int crtc_w, unsigned int crtc_h,
 			    uint32_t src_x, uint32_t src_y,
@@ -681,6 +692,7 @@ struct drm_plane {
 
 	struct drm_crtc *crtc;
 	struct drm_framebuffer *fb;
+	struct drm_live_source *src;
 
 	/* CRTC gamma size for reporting to userspace */
 	uint32_t gamma_size;
@@ -692,6 +704,31 @@ struct drm_plane {
 	void *helper_private;
 
 	struct drm_object_properties properties;
+};
+
+struct drm_live_source_funcs {
+	void (*destroy)(struct drm_live_source *src);
+};
+
+struct drm_live_source {
+	struct drm_device *dev;
+	struct list_head head;
+	struct list_head filp_head;
+
+	struct drm_mode_object base;
+
+	char name[DRM_SOURCE_NAME_LEN];
+
+	uint32_t possible_planes;
+	uint32_t *format_types;
+	uint32_t format_count;
+
+	struct drm_plane *plane;
+	unsigned int width;
+	unsigned int height;
+	uint32_t pixel_format;
+
+	const struct drm_live_source_funcs *funcs;
 };
 
 /**
@@ -809,6 +846,8 @@ struct drm_mode_config {
 	struct list_head encoder_list;
 	int num_plane;
 	struct list_head plane_list;
+	int num_live_source;
+	struct list_head live_source_list;
 
 	int num_crtc;
 	struct list_head crtc_list;
@@ -866,6 +905,7 @@ struct drm_mode_config {
 #define obj_to_property(x) container_of(x, struct drm_property, base)
 #define obj_to_blob(x) container_of(x, struct drm_property_blob, base)
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
+#define obj_to_live_source(x) container_of(x, struct drm_live_source, base)
 
 struct drm_prop_enum_list {
 	int type;
@@ -906,6 +946,14 @@ extern int drm_plane_init(struct drm_device *dev,
 extern void drm_plane_cleanup(struct drm_plane *plane);
 
 extern void drm_encoder_cleanup(struct drm_encoder *encoder);
+
+extern int drm_live_source_init(struct drm_device *dev,
+				struct drm_live_source *src, const char *name,
+				unsigned long possible_planes,
+				const uint32_t *formats, uint32_t format_count,
+				const struct drm_live_source_funcs *funcs);
+extern void drm_live_source_cleanup(struct drm_live_source *src);
+extern void drm_live_sources_release(struct drm_file *priv);
 
 extern const char *drm_get_connector_name(const struct drm_connector *connector);
 extern const char *drm_get_connector_status_name(enum drm_connector_status status);
@@ -1021,6 +1069,8 @@ extern int drm_mode_getresources(struct drm_device *dev,
 				 void *data, struct drm_file *file_priv);
 extern int drm_mode_getplane_res(struct drm_device *dev, void *data,
 				   struct drm_file *file_priv);
+extern int drm_mode_getsource_res(struct drm_device *dev, void *data,
+				  struct drm_file *file_priv);
 extern int drm_mode_getcrtc(struct drm_device *dev,
 			    void *data, struct drm_file *file_priv);
 extern int drm_mode_getconnector(struct drm_device *dev,
@@ -1032,6 +1082,10 @@ extern int drm_mode_getplane(struct drm_device *dev,
 			       void *data, struct drm_file *file_priv);
 extern int drm_mode_setplane(struct drm_device *dev,
 			       void *data, struct drm_file *file_priv);
+extern int drm_mode_getsource(struct drm_device *dev,
+			      void *data, struct drm_file *file_priv);
+extern int drm_mode_setsource(struct drm_device *dev,
+			      void *data, struct drm_file *file_priv);
 extern int drm_mode_cursor_ioctl(struct drm_device *dev,
 				void *data, struct drm_file *file_priv);
 extern int drm_mode_addfb(struct drm_device *dev,
@@ -1083,6 +1137,10 @@ extern int drm_add_modes_noedid(struct drm_connector *connector,
 				int hdisplay, int vdisplay);
 
 extern int drm_edid_header_is_valid(const u8 *raw_edid);
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+extern struct edid *drm_do_get_edid(struct drm_connector *connector,
+int (*get_edid_block)(void *, unsigned char *buf, int, int), void *data);
+#endif
 extern bool drm_edid_block_valid(u8 *raw_edid, int block, bool print_bad_edid);
 extern bool drm_edid_is_valid(struct edid *edid);
 struct drm_display_mode *drm_mode_find_dmt(struct drm_device *dev,

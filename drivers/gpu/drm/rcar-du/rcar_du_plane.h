@@ -1,7 +1,7 @@
 /*
  * rcar_du_plane.h  --  R-Car Display Unit Planes
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -19,6 +19,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 
+struct rcar_du_device;
 struct rcar_du_format_info;
 struct rcar_du_group;
 
@@ -28,9 +29,20 @@ struct rcar_du_group;
  * 9 software planes (one for each KMS planes and one for each CRTC).
  */
 
-#define RCAR_DU_NUM_KMS_PLANES		7
+#define RCAR_DU01_NUM_KMS_PLANES	6
+#define RCAR_DU2_NUM_KMS_PLANES		7
 #define RCAR_DU_NUM_HW_PLANES		8
 #define RCAR_DU_NUM_SW_PLANES		9
+
+#define DU_CH_0		0
+#define DU_CH_1		1
+#define DU_CH_2		2
+
+enum rcar_du_plane_source {
+	RCAR_DU_PLANE_MEMORY,
+	RCAR_DU_PLANE_VSPD0,
+	RCAR_DU_PLANE_VSPD1,
+};
 
 struct rcar_du_plane {
 	struct rcar_du_group *group;
@@ -39,9 +51,12 @@ struct rcar_du_plane {
 	bool enabled;
 
 	int hwindex;		/* 0-based, -1 means unused */
+	enum rcar_du_plane_source source;
+
 	unsigned int alpha;
 	unsigned int colorkey;
 	unsigned int zpos;
+	unsigned int channel;
 
 	const struct rcar_du_format_info *format;
 
@@ -55,17 +70,24 @@ struct rcar_du_plane {
 	unsigned int src_y;
 	unsigned int dst_x;
 	unsigned int dst_y;
+
+	bool fb_plane;
+	bool interlace_flag;
 };
 
 struct rcar_du_planes {
 	struct rcar_du_plane planes[RCAR_DU_NUM_SW_PLANES];
 	unsigned int free;
+	bool need_restart;
 	struct mutex lock;
 
 	struct drm_property *alpha;
 	struct drm_property *colorkey;
 	struct drm_property *zpos;
+	struct drm_property *channel;
 };
+
+int rcar_du_vsp1_sources_init(struct rcar_du_device *rcdu);
 
 int rcar_du_planes_init(struct rcar_du_group *rgrp);
 int rcar_du_planes_register(struct rcar_du_group *rgrp);

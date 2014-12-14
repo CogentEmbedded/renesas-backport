@@ -1,7 +1,12 @@
 /*
- * rcar_du_vgacon.c  --  R-Car Display Unit VGA Connector
+ * drivers/gpu/drm/rcar-du/rcar_du_hdmicon.c
+ *    R-Car Display Unit HDMI Connector
  *
- * Copyright (C) 2013-2014 Renesas Electronics Corporation
+ * Copyright (C) 2013 Renesas Electronics Corporation
+ *
+ * This file is based on the drivers/gpu/drm/rcar-du/rcar_du_lvdscon.c
+ *
+ * Copyright (C) 2013 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -15,22 +20,40 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_encoder_slave.h>
+#include <linux/gpio.h>
+#include <linux/i2c.h>
+#include <linux/of_gpio.h>
 
 #include "rcar_du_drv.h"
 #include "rcar_du_encoder.h"
 #include "rcar_du_kms.h"
-#include "rcar_du_vgacon.h"
+#include "rcar_du_hdmicon.h"
+#include "../i2c/adv7511.h"
 
-static int rcar_du_vga_connector_get_modes(struct drm_connector *connector)
+static inline struct drm_encoder *connector_to_encoder(
+					struct drm_connector *connector)
 {
-	if ((connector->cmd_xres > 1280) || (connector->cmd_yres > 720))
-		return drm_add_modes_noedid(connector,
-			connector->cmd_xres, connector->cmd_yres);
-	else
-		return drm_add_modes_noedid(connector, 1280, 720);
+	struct rcar_du_connector *rcon =
+		 container_of(connector, struct rcar_du_connector, connector);
+	return rcon->encoder->encoder;
 }
 
-static int rcar_du_vga_connector_mode_valid(struct drm_connector *connector,
+static int rcar_du_hdmi_connector_get_modes(struct drm_connector *connector)
+{
+	int count = 0;
+	struct drm_encoder *encoder = connector_to_encoder(connector);
+
+	if (to_encoder_slave(encoder)->slave_funcs &&
+		 to_encoder_slave(encoder)->slave_funcs->get_modes)
+		count += to_encoder_slave(encoder)->slave_funcs->get_modes(
+					encoder, connector);
+	else
+		return -EIO;
+
+	return count;
+}
+
+static int rcar_du_hdmi_connector_mode_valid(struct drm_connector *connector,
 					    struct drm_display_mode *mode)
 {
 	struct rcar_du_connector *rcon = to_rcar_connector(connector);
@@ -40,6 +63,9 @@ static int rcar_du_vga_connector_mode_valid(struct drm_connector *connector,
 	max_width = rcon->encoder->dev->info->max_xres;
 	max_height = rcon->encoder->dev->info->max_yres;
 	laced = rcon->encoder->dev->info->interlace;
+
+	if (mode->clock > 165000)
+		return MODE_CLOCK_HIGH;
 
 	if ((mode->hdisplay * mode->vdisplay) > (max_width * max_height))
 		return MODE_BAD_WIDTH;
@@ -52,48 +78,64 @@ static int rcar_du_vga_connector_mode_valid(struct drm_connector *connector,
 }
 
 static const struct drm_connector_helper_funcs connector_helper_funcs = {
-	.get_modes = rcar_du_vga_connector_get_modes,
-	.mode_valid = rcar_du_vga_connector_mode_valid,
+	.get_modes = rcar_du_hdmi_connector_get_modes,
+	.mode_valid = rcar_du_hdmi_connector_mode_valid,
 	.best_encoder = rcar_du_connector_best_encoder,
 };
 
-static void rcar_du_vga_connector_destroy(struct drm_connector *connector)
+static void rcar_du_hdmi_connector_destroy(struct drm_connector *connector)
 {
 	drm_sysfs_connector_remove(connector);
 	drm_connector_cleanup(connector);
 }
 
 static enum drm_connector_status
-rcar_du_vga_connector_detect(struct drm_connector *connector, bool force)
+rcar_du_hdmi_connector_detect(struct drm_connector *connector, bool force)
 {
-	return connector_status_connected;
+	enum drm_connector_status status = connector_status_unknown;
+	struct drm_encoder *encoder = connector_to_encoder(connector);
+
+	if (to_encoder_slave(encoder)->slave_funcs &&
+		 to_encoder_slave(encoder)->slave_funcs->detect)
+		status =
+		 to_encoder_slave(encoder)->slave_funcs->detect(
+						encoder, connector);
+
+	return status;
 }
 
 static const struct drm_connector_funcs connector_funcs = {
 	.dpms = drm_helper_connector_dpms,
-	.detect = rcar_du_vga_connector_detect,
+	.detect = rcar_du_hdmi_connector_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
-	.destroy = rcar_du_vga_connector_destroy,
+	.destroy = rcar_du_hdmi_connector_destroy,
 };
 
-int rcar_du_vga_connector_init(struct rcar_du_device *rcdu,
+int rcar_du_hdmi_connector_init(struct rcar_du_device *rcdu,
 			       struct rcar_du_encoder *renc)
 {
 	struct rcar_du_connector *rcon;
 	struct drm_connector *connector;
 	int ret;
+	struct device_node *np;
 
 	rcon = devm_kzalloc(rcdu->dev, sizeof(*rcon), GFP_KERNEL);
 	if (rcon == NULL)
 		return -ENOMEM;
 
 	connector = &rcon->connector;
-	connector->display_info.width_mm = 0;
-	connector->display_info.height_mm = 0;
+
+	np = of_find_node_by_name(NULL, "adv7511");
+	if ((np) && (of_get_gpio(np, 0) > 0))
+		connector->polled = DRM_CONNECTOR_POLL_HPD;
+	else
+		connector->polled = DRM_CONNECTOR_POLL_CONNECT |
+					DRM_CONNECTOR_POLL_DISCONNECT;
 	connector->interlace_allowed = true;
 
 	ret = drm_connector_init(rcdu->ddev, connector, &connector_funcs,
-				 DRM_MODE_CONNECTOR_VGA);
+				 DRM_MODE_CONNECTOR_HDMIA);
+
 	if (ret < 0)
 		return ret;
 

@@ -168,6 +168,12 @@ static const struct drm_display_mode drm_dmt_modes[] = {
 	{ DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 36000, 640, 696,
 		   752, 832, 0, 480, 481, 484, 509, 0,
 		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	/* 800x480@60Hz */
+	{ DRM_MODE("800x480", DRM_MODE_TYPE_DRIVER, 29580, 800, 816,
+		   896, 992, 0, 480, 481, 484, 497, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+#endif
 	/* 800x600@56Hz */
 	{ DRM_MODE("800x600", DRM_MODE_TYPE_DRIVER, 36000, 800, 824,
 		   896, 1024, 0, 600, 601, 603, 625, 0,
@@ -196,6 +202,12 @@ static const struct drm_display_mode drm_dmt_modes[] = {
 	{ DRM_MODE("848x480", DRM_MODE_TYPE_DRIVER, 33750, 848, 864,
 		   976, 1088, 0, 480, 486, 494, 517, 0,
 		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	/* 1024x600@60Hz */
+	{ DRM_MODE("1024x600", DRM_MODE_TYPE_DRIVER, 48960, 1024, 1064,
+		   1168, 1312, 0, 600, 601, 604, 622, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+#endif
 	/* 1024x768@43Hz, interlace */
 	{ DRM_MODE("1024x768i", DRM_MODE_TYPE_DRIVER, 44900, 1024, 1032,
 		   1208, 1264, 0, 768, 768, 772, 817, 0,
@@ -225,6 +237,12 @@ static const struct drm_display_mode drm_dmt_modes[] = {
 	{ DRM_MODE("1152x864", DRM_MODE_TYPE_DRIVER, 108000, 1152, 1216,
 		   1344, 1600, 0, 864, 865, 868, 900, 0,
 		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	/* 1280x720@60Hz */
+	{ DRM_MODE("1280x720", DRM_MODE_TYPE_DRIVER, 74480, 1280, 1336,
+		   1472, 1664, 0, 720, 721, 724, 746, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+#endif
 	/* 1280x768@60Hz RB */
 	{ DRM_MODE("1280x768", DRM_MODE_TYPE_DRIVER, 68250, 1280, 1328,
 		   1360, 1440, 0, 768, 771, 778, 790, 0,
@@ -409,6 +427,17 @@ static const struct drm_display_mode drm_dmt_modes[] = {
 	{ DRM_MODE("1856x1392", DRM_MODE_TYPE_DRIVER, 356500, 1856, 1904,
 		   1936, 2016, 0, 1392, 1395, 1399, 1474, 0,
 		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	/* 1920x1080i@60Hz */
+	{ DRM_MODE("1920x1080i", DRM_MODE_TYPE_DRIVER, 74250, 1920, 2008,
+		   2052, 2200, 0, 1080, 1084, 1094, 1125, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC |
+		   DRM_MODE_FLAG_INTERLACE) },
+	/* 1920x1080@60Hz */
+	{ DRM_MODE("1920x1080", DRM_MODE_TYPE_DRIVER, 172800, 1920, 2040,
+		   2248, 2576, 0, 1080, 1081, 1084, 1118, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+#endif
 	/* 1920x1200@60Hz RB */
 	{ DRM_MODE("1920x1200", DRM_MODE_TYPE_DRIVER, 154000, 1920, 1968,
 		   2000, 2080, 0, 1200, 1203, 1209, 1235, 0,
@@ -1094,9 +1123,17 @@ EXPORT_SYMBOL(drm_edid_is_valid);
  * Try to fetch EDID information by calling i2c driver function.
  */
 static int
-drm_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned char *buf,
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+drm_do_probe_ddc_edid(void *data, unsigned char *buf,
 		      int block, int len)
+#else
+drm_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned char *buf,
+			int block, int len)
+#endif
 {
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+	struct i2c_adapter *adapter = data;
+#endif
 	unsigned char start = block * EDID_LENGTH;
 	unsigned char segment = block >> 1;
 	unsigned char xfers = segment ? 3 : 2;
@@ -1152,8 +1189,13 @@ static bool drm_edid_is_zero(u8 *in_edid, int length)
 	return true;
 }
 
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+struct edid *drm_do_get_edid(struct drm_connector *connector,
+	int (*get_edid_block)(void *, unsigned char *buf, int, int), void *data)
+#else
 static u8 *
 drm_do_get_edid(struct drm_connector *connector, struct i2c_adapter *adapter)
+#endif
 {
 	int i, j = 0, valid_extensions = 0;
 	u8 *block, *new;
@@ -1164,7 +1206,11 @@ drm_do_get_edid(struct drm_connector *connector, struct i2c_adapter *adapter)
 
 	/* base block fetch */
 	for (i = 0; i < 4; i++) {
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+		if (get_edid_block(data, block, 0, EDID_LENGTH))
+#else
 		if (drm_do_probe_ddc_edid(adapter, block, 0, EDID_LENGTH))
+#endif
 			goto out;
 		if (drm_edid_block_valid(block, 0, print_bad_edid))
 			break;
@@ -1178,8 +1224,11 @@ drm_do_get_edid(struct drm_connector *connector, struct i2c_adapter *adapter)
 
 	/* if there's no extensions, we're done */
 	if (block[0x7e] == 0)
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+		return (struct edid *)block;
+#else
 		return block;
-
+#endif
 	new = krealloc(block, (block[0x7e] + 1) * EDID_LENGTH, GFP_KERNEL);
 	if (!new)
 		goto out;
@@ -1187,9 +1236,15 @@ drm_do_get_edid(struct drm_connector *connector, struct i2c_adapter *adapter)
 
 	for (j = 1; j <= block[0x7e]; j++) {
 		for (i = 0; i < 4; i++) {
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+			if (get_edid_block(data,
+				  block + (valid_extensions + 1) * EDID_LENGTH,
+				  j, EDID_LENGTH))
+#else
 			if (drm_do_probe_ddc_edid(adapter,
 				  block + (valid_extensions + 1) * EDID_LENGTH,
 				  j, EDID_LENGTH))
+#endif
 				goto out;
 			if (drm_edid_block_valid(block + (valid_extensions + 1) * EDID_LENGTH, j, print_bad_edid)) {
 				valid_extensions++;
@@ -1215,8 +1270,11 @@ drm_do_get_edid(struct drm_connector *connector, struct i2c_adapter *adapter)
 		block = new;
 	}
 
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+	return (struct edid *)block;
+#else
 	return block;
-
+#endif
 carp:
 	if (print_bad_edid) {
 		dev_warn(connector->dev->dev, "%s: EDID block %d invalid.\n",
@@ -1228,6 +1286,9 @@ out:
 	kfree(block);
 	return NULL;
 }
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+EXPORT_SYMBOL_GPL(drm_do_get_edid);
+#endif
 
 /**
  * Probe DDC presence.
@@ -1260,8 +1321,12 @@ struct edid *drm_get_edid(struct drm_connector *connector,
 	struct edid *edid = NULL;
 
 	if (drm_probe_ddc(adapter))
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+		edid = drm_do_get_edid(connector,
+				 drm_do_probe_ddc_edid, adapter);
+#else
 		edid = (struct edid *)drm_do_get_edid(connector, adapter);
-
+#endif
 	return edid;
 }
 EXPORT_SYMBOL(drm_get_edid);
