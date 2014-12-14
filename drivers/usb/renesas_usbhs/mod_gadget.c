@@ -22,6 +22,7 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include "common.h"
+#include <linux/usb/otg.h>
 
 /*
  *		struct
@@ -31,7 +32,7 @@ struct usbhsg_request {
 	struct usbhs_pkt	pkt;
 };
 
-#define EP_NAME_SIZE 8
+#define EP_NAME_SIZE 16
 struct usbhsg_gpriv;
 struct usbhsg_uep {
 	struct usb_ep		 ep;
@@ -56,6 +57,8 @@ struct usbhsg_gpriv {
 #define USBHSG_STATUS_REGISTERD		(1 << 1)
 #define USBHSG_STATUS_WEDGE		(1 << 2)
 #define USBHSG_STATUS_SELF_POWERED	(1 << 3)
+
+	unsigned		softconnect:1;
 };
 
 struct usbhsg_recip_handle {
@@ -484,6 +487,9 @@ static int usbhsg_irq_ctrl_stage(struct usbhs_priv *priv,
 	case NODATA_STATUS_STAGE:
 		pipe->handler = &usbhs_ctrl_stage_end_handler;
 		break;
+	case READ_STATUS_STAGE:
+	case WRITE_STATUS_STAGE:
+		usbhs_dcp_control_transfer_done(pipe);
 	default:
 		return ret;
 	}
@@ -600,11 +606,15 @@ static int usbhsg_ep_enable(struct usb_ep *ep,
 static int usbhsg_ep_disable(struct usb_ep *ep)
 {
 	struct usbhsg_uep *uep = usbhsg_ep_to_uep(ep);
+	struct usbhs_pipe *pipe = usbhsg_uep_to_pipe(uep);
 
-	usbhsg_pipe_disable(uep);
+	if (uep->pipe != NULL) {
+		usbhsg_pipe_disable(uep);
+		usbhs_pipe_free(uep->pipe);
 
-	uep->pipe->mod_private	= NULL;
-	uep->pipe		= NULL;
+		uep->pipe->mod_private	= NULL;
+		uep->pipe		= NULL;
+	}
 
 	return 0;
 }
@@ -657,7 +667,9 @@ static int usbhsg_ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 	struct usbhsg_request *ureq = usbhsg_req_to_ureq(req);
 	struct usbhs_pipe *pipe = usbhsg_uep_to_pipe(uep);
 
-	usbhs_pkt_pop(pipe, usbhsg_ureq_to_pkt(ureq));
+	if (pipe != NULL)
+		usbhs_pkt_pop(pipe, usbhsg_ureq_to_pkt(ureq));
+
 	usbhsg_queue_pop(uep, ureq, -ECONNRESET);
 
 	return 0;
@@ -721,6 +733,24 @@ static struct usb_ep_ops usbhsg_ep_ops = {
 };
 
 /*
+ *		pullup control
+ */
+static int usbhsg_can_pullup(struct usbhs_priv *priv)
+{
+	struct usbhsg_gpriv *gpriv = usbhsg_priv_to_gpriv(priv);
+
+	return gpriv->driver && gpriv->softconnect;
+}
+
+static void usbhsg_update_pullup(struct usbhs_priv *priv)
+{
+	if (usbhsg_can_pullup(priv))
+		usbhs_sys_function_pullup(priv, 1);
+	else
+		usbhs_sys_function_pullup(priv, 0);
+}
+
+/*
  *		usb module start/end
  */
 static int usbhsg_try_start(struct usbhs_priv *priv, u32 status)
@@ -754,9 +784,9 @@ static int usbhsg_try_start(struct usbhs_priv *priv, u32 status)
 	/*
 	 * pipe initialize and enable DCP
 	 */
+	usbhs_fifo_init(priv);
 	usbhs_pipe_init(priv,
 			usbhsg_dma_map_ctrl);
-	usbhs_fifo_init(priv);
 
 	/* dcp init instead of usbhsg_ep_enable() */
 	dcp->pipe		= usbhs_dcp_malloc(priv);
@@ -769,7 +799,10 @@ static int usbhsg_try_start(struct usbhs_priv *priv, u32 status)
 	 * - function
 	 * - usb module
 	 */
+	usbhs_lock(priv, flags);
 	usbhs_sys_function_ctrl(priv, 1);
+	usbhsg_update_pullup(priv);
+	usbhs_unlock(priv, flags);
 
 	/*
 	 * enable irq callback
@@ -818,7 +851,10 @@ static int usbhsg_try_stop(struct usbhs_priv *priv, u32 status)
 
 	/* disable sys */
 	usbhs_sys_set_test_mode(priv, 0);
+
+	usbhs_lock(priv, flags);
 	usbhs_sys_function_ctrl(priv, 0);
+	usbhs_unlock(priv, flags);
 
 	usbhsg_ep_disable(&dcp->ep);
 
@@ -876,8 +912,12 @@ static int usbhsg_pullup(struct usb_gadget *gadget, int is_on)
 {
 	struct usbhsg_gpriv *gpriv = usbhsg_gadget_to_gpriv(gadget);
 	struct usbhs_priv *priv = usbhsg_gpriv_to_priv(gpriv);
+	unsigned long flags;
 
-	usbhs_sys_function_pullup(priv, is_on);
+	usbhs_lock(priv, flags);
+	gpriv->softconnect = (is_on != 0);
+	usbhsg_update_pullup(priv);
+	usbhs_unlock(priv, flags);
 
 	return 0;
 }
@@ -893,14 +933,6 @@ static int usbhsg_set_selfpowered(struct usb_gadget *gadget, int is_self)
 
 	return 0;
 }
-
-static const struct usb_gadget_ops usbhsg_gadget_ops = {
-	.get_frame		= usbhsg_get_frame,
-	.set_selfpowered	= usbhsg_set_selfpowered,
-	.udc_start		= usbhsg_gadget_start,
-	.udc_stop		= usbhsg_gadget_stop,
-	.pullup			= usbhsg_pullup,
-};
 
 static int usbhsg_start(struct usbhs_priv *priv)
 {
@@ -919,6 +951,61 @@ static int usbhsg_stop(struct usbhs_priv *priv)
 	return usbhsg_try_stop(priv, USBHSG_STATUS_STARTED);
 }
 
+#define usbhs_platform_call(priv, func, args...)\
+	(!(priv) ? -ENODEV :			\
+	 !((priv)->pfunc.func) ? 0 :		\
+	 (priv)->pfunc.func(args))
+
+static int usbhsg_vbus_session(struct usb_gadget *gadget, int is_active)
+{
+	struct usbhsg_gpriv *gpriv = usbhsg_gadget_to_gpriv(gadget);
+	struct usbhs_priv *priv = usbhsg_gpriv_to_priv(gpriv);
+	struct device *dev = usbhs_priv_to_dev(priv);
+	struct platform_device *pdev = usbhs_priv_to_pdev(priv);
+	int id;
+
+	dev_dbg(dev, "is_active = %d\n", is_active);
+	id = usbhs_platform_call(priv, get_id, pdev);
+
+	usbhs_mod_change(priv, id);
+
+	if (is_active == 1) {
+		/* power on */
+		usbhsc_power_ctrl(priv, is_active);
+		/* bus init */
+		usbhsc_set_buswait(priv);
+		usbhsc_bus_init(priv);
+
+		/* module start */
+		usbhsg_start(priv);
+	} else {
+		/* module stop */
+		usbhsg_stop(priv);
+
+		/* bus init */
+		usbhsc_bus_init(priv);
+
+		/* power off */
+		usbhsc_power_ctrl(priv, is_active);
+
+		usbhs_mod_change(priv, -1);
+
+		/* reset phy for next connection */
+		usbhs_platform_call(priv, phy_reset, pdev);
+	}
+
+	return 0;
+}
+
+static const struct usb_gadget_ops usbhsg_gadget_ops = {
+	.get_frame		= usbhsg_get_frame,
+	.set_selfpowered	= usbhsg_set_selfpowered,
+	.vbus_session		= usbhsg_vbus_session,
+	.udc_start		= usbhsg_gadget_start,
+	.udc_stop		= usbhsg_gadget_stop,
+	.pullup			= usbhsg_pullup,
+};
+
 int usbhs_mod_gadget_probe(struct usbhs_priv *priv)
 {
 	struct usbhsg_gpriv *gpriv;
@@ -927,6 +1014,7 @@ int usbhs_mod_gadget_probe(struct usbhs_priv *priv)
 	int pipe_size = usbhs_get_dparam(priv, pipe_size);
 	int i;
 	int ret;
+	u32 pipe_type;
 
 	gpriv = kzalloc(sizeof(struct usbhsg_gpriv), GFP_KERNEL);
 	if (!gpriv) {
@@ -978,21 +1066,37 @@ int usbhs_mod_gadget_probe(struct usbhs_priv *priv)
 	usbhsg_for_each_uep_with_dcp(uep, gpriv, i) {
 		uep->gpriv	= gpriv;
 		uep->pipe	= NULL;
-		snprintf(uep->ep_name, EP_NAME_SIZE, "ep%d", i);
-
 		uep->ep.name		= uep->ep_name;
 		uep->ep.ops		= &usbhsg_ep_ops;
 		INIT_LIST_HEAD(&uep->ep.ep_list);
+		pipe_type = usbhs_get_dparam(priv, pipe_type[i]);
 
-		/* init DCP */
-		if (usbhsg_is_dcp(uep)) {
+		switch (pipe_type) {
+		case USB_ENDPOINT_XFER_CONTROL:
+			/* init DCP */
+			snprintf(uep->ep_name, sizeof(uep->ep_name),
+				"ep0");
 			gpriv->gadget.ep0 = &uep->ep;
 			uep->ep.maxpacket = 64;
-		}
-		/* init normal pipe */
-		else {
+			break;
+		case USB_ENDPOINT_XFER_BULK:
+			snprintf(uep->ep_name, sizeof(uep->ep_name),
+				"ep%d-bulk", i);
 			uep->ep.maxpacket = 512;
 			list_add_tail(&uep->ep.ep_list, &gpriv->gadget.ep_list);
+			break;
+		case USB_ENDPOINT_XFER_INT:
+			snprintf(uep->ep_name, sizeof(uep->ep_name),
+				"ep%d-int", i);
+			uep->ep.maxpacket = 64;
+			list_add_tail(&uep->ep.ep_list, &gpriv->gadget.ep_list);
+			break;
+		case USB_ENDPOINT_XFER_ISOC:
+			snprintf(uep->ep_name, sizeof(uep->ep_name),
+				"ep%d-iso", i);
+			uep->ep.maxpacket = 1024;
+			list_add_tail(&uep->ep.ep_list, &gpriv->gadget.ep_list);
+			break;
 		}
 	}
 

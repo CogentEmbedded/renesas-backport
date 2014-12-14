@@ -153,12 +153,26 @@ struct renesas_usbhs_driver_param {
 	 */
 	int pio_dma_border; /* default is 64byte */
 
+	u32 type;
+	u32 enable_gpio;
+
+	/*
+	 * option:
+	 *
+	 * Transfer size of USB-DMAC.
+	 *  - The driver doesn't use the USB-DMAC if this value is 0
+	 */
+	int usb_dmac_xfer_size;
+
 	/*
 	 * option:
 	 */
 	u32 has_otg:1; /* for controlling PWEN/EXTLP */
 	u32 has_sudmac:1; /* for SUDMAC */
 };
+
+#define USBHS_TYPE_R8A7790 1
+#define USBHS_TYPE_R8A7791 2
 
 /*
  * option:
