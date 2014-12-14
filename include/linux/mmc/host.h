@@ -267,6 +267,9 @@ struct mmc_host {
 #define MMC_CAP2_POWEROFF_NOTIFY (1 << 2)	/* Notify poweroff supported */
 #define MMC_CAP2_NO_MULTI_READ	(1 << 3)	/* Multiblock reads don't work */
 #define MMC_CAP2_NO_SLEEP_CMD	(1 << 4)	/* Don't allow sleep command */
+#define MMC_CAP2_2BLKS_LIMIT	(1 << 15)	/* 2 blocks limit for multi read */
+#define MMC_CAP2_NO_2BLKS_READ	(MMC_CAP2_NO_MULTI_READ | \
+				 MMC_CAP2_2BLKS_LIMIT)
 #define MMC_CAP2_HS200_1_8V_SDR	(1 << 5)        /* can support */
 #define MMC_CAP2_HS200_1_2V_SDR	(1 << 6)        /* can support */
 #define MMC_CAP2_HS200		(MMC_CAP2_HS200_1_8V_SDR | \
@@ -310,6 +313,7 @@ struct mmc_host {
 
 	struct mmc_ios		ios;		/* current io bus settings */
 	u32			ocr;		/* the current OCR setting */
+	u32			rocr;		/* OCR information */
 
 	/* group bitfields together to minimize padding */
 	unsigned int		use_spi_crc:1;
@@ -361,6 +365,8 @@ struct mmc_host {
 	unsigned int		actual_clock;	/* Actual HC clock rate */
 
 	unsigned int		slotno;	/* used for sdio acpi binding */
+
+	int			lock_mode;	/* lock/unlock modes */
 
 	unsigned long		private[0] ____cacheline_aligned;
 };

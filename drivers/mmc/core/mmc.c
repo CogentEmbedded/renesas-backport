@@ -20,6 +20,7 @@
 
 #include "core.h"
 #include "bus.h"
+#include "lock.h"
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
@@ -653,6 +654,9 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_enhanced_area_size.attr,
 	&dev_attr_raw_rpmb_size_mult.attr,
 	&dev_attr_rel_sectors.attr,
+#ifdef CONFIG_MMC_PASSWORDS
+	&dev_attr_lockable.attr,
+#endif
 	NULL,
 };
 
@@ -844,9 +848,15 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	unsigned int max_dtr;
 	u32 rocr;
 	u8 *ext_csd = NULL;
+	u32 status;
 
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
+
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK) {
+		card = host->card;
+		goto check_card;
+	}
 
 	/* Set correct bus mode for MMC before attempting init */
 	if (!mmc_host_is_spi(host))
@@ -865,6 +875,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	err = mmc_send_op_cond(host, ocr | (1 << 30), &rocr);
 	if (err)
 		goto err;
+
+	host->rocr = rocr;
 
 	/*
 	 * For SPI, enable CRC as appropriate.
@@ -918,6 +930,21 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		mmc_set_bus_mode(host, MMC_BUSMODE_PUSHPULL);
 	}
 
+check_card:
+	/*
+	* Check if card is locked.
+	*/
+	err = mmc_send_status(card, &status);
+	if (err)
+		goto free_card;
+	if (status & R1_CARD_IS_LOCKED)
+		mmc_card_set_locked(card);
+	else
+		card->state &= ~MMC_STATE_LOCKED;
+
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK)
+		goto setup_card;
+
 	if (!oldcard) {
 		/*
 		 * Fetch CSD from card.
@@ -943,6 +970,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			goto free_card;
 	}
 
+setup_card:
 	if (!oldcard) {
 		/*
 		 * Fetch and process extended CSD.
@@ -960,7 +988,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		 * addressing.  See section 8.1 JEDEC Standard JED84-A441;
 		 * ocr register has bit 30 set for sector addressing.
 		 */
-		if (!(mmc_card_blockaddr(card)) && (rocr & (1<<30)))
+		if (!(mmc_card_blockaddr(card)) && (host->rocr & (1<<30)))
 			mmc_card_set_blockaddr(card);
 
 		/* Erase size depends on CSD and Extended CSD */
@@ -1421,7 +1449,8 @@ static int mmc_suspend(struct mmc_host *host)
 		err = mmc_card_sleep(host);
 	else if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
-	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
+	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200
+						   | MMC_STATE_LOCKED);
 
 out:
 	mmc_release_host(host);
@@ -1534,6 +1563,9 @@ int mmc_attach_mmc(struct mmc_host *host)
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
 
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK)
+		goto init_card;
+
 	/* Set correct bus mode for MMC before attempting attach */
 	if (!mmc_host_is_spi(host))
 		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
@@ -1576,6 +1608,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 		goto err;
 	}
 
+init_card:
 	/*
 	 * Detect and init the card.
 	 */
@@ -1583,12 +1616,16 @@ int mmc_attach_mmc(struct mmc_host *host)
 	if (err)
 		goto err;
 
+	if (host->lock_mode & MMC_LOCK_MODE_UNLOCK)
+		goto end;
+
 	mmc_release_host(host);
 	err = mmc_add_card(host->card);
 	mmc_claim_host(host);
 	if (err)
 		goto remove_card;
 
+end:
 	return 0;
 
 remove_card:
