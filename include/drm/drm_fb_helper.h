@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  * Copyright (c) 2006-2009 Red Hat Inc.
  * Copyright (c) 2006-2008 Intel Corporation
  * Copyright (c) 2007 Dave Airlie <airlied@linux.ie>
@@ -34,9 +35,16 @@ struct drm_fb_helper;
 
 #include <linux/kgdb.h>
 
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+#define DRM_FB_CHANGED		1
+#define DRM_MODE_CHANGED	2
+#define DRM_FB_PANDISPLAY	3
+#endif
+
 struct drm_fb_helper_crtc {
 	struct drm_mode_set mode_set;
 	struct drm_display_mode *desired_mode;
+	u32 init_conn_type;
 };
 
 struct drm_fb_helper_surface_size {
@@ -95,6 +103,10 @@ struct drm_fb_helper {
 	/* we got a hotplug but fbdev wasn't running the console
 	   delay until next set_par */
 	bool delayed_hotplug;
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+	bool detect_hotplug;
+	bool first_hotplug;
+#endif
 };
 
 int drm_fb_helper_init(struct drm_device *dev,
@@ -104,6 +116,8 @@ void drm_fb_helper_fini(struct drm_fb_helper *helper);
 int drm_fb_helper_blank(int blank, struct fb_info *info);
 int drm_fb_helper_pan_display(struct fb_var_screeninfo *var,
 			      struct fb_info *info);
+int drm_fb_helper_ioctl(struct fb_info *info, unsigned int cmd,
+			unsigned long arg);
 int drm_fb_helper_set_par(struct fb_info *info);
 int drm_fb_helper_check_var(struct fb_var_screeninfo *var,
 			    struct fb_info *info);

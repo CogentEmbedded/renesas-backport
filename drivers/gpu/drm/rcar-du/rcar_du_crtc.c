@@ -1,7 +1,7 @@
 /*
  * rcar_du_crtc.c  --  R-Car Display Unit CRTCs
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -13,6 +13,7 @@
 
 #include <linux/clk.h>
 #include <linux/mutex.h>
+#include <linux/rcar-du-frm-interface.h>
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
@@ -25,6 +26,9 @@
 #include "rcar_du_kms.h"
 #include "rcar_du_plane.h"
 #include "rcar_du_regs.h"
+
+#define  RCAR_DU_MAX_CH  3
+static int du_frmend[RCAR_DU_MAX_CH] = {0};
 
 static u32 rcar_du_crtc_read(struct rcar_du_crtc *rcrtc, u32 reg)
 {
@@ -69,6 +73,9 @@ static int rcar_du_crtc_get(struct rcar_du_crtc *rcrtc)
 {
 	int ret;
 
+	if (rcrtc->started)
+		return 0;
+
 	ret = clk_prepare_enable(rcrtc->clock);
 	if (ret < 0)
 		return ret;
@@ -82,6 +89,9 @@ static int rcar_du_crtc_get(struct rcar_du_crtc *rcrtc)
 
 static void rcar_du_crtc_put(struct rcar_du_crtc *rcrtc)
 {
+	if (!rcrtc->started)
+		return;
+
 	rcar_du_group_put(rcrtc->group);
 	clk_disable_unprepare(rcrtc->clock);
 }
@@ -89,24 +99,61 @@ static void rcar_du_crtc_put(struct rcar_du_crtc *rcrtc)
 static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 {
 	const struct drm_display_mode *mode = &rcrtc->crtc.mode;
-	unsigned long clk;
+	unsigned long clk_in = 0, clk_ex = 0;
 	u32 value;
-	u32 div;
+	u32 div = 0, div_in = 0, div_ex = 0;
+	u32 abs_in = 0, abs_ex = 0;
+	u32 dclksel_bit = 0, dclkoinv_bit = 0;
+	const struct rcar_du_crtc_data *pdata =
+			&rcrtc->group->dev->pdata->crtcs[rcrtc->index];
+	int vdsr, vder;
 
-	/* Dot clock */
-	clk = clk_get_rate(rcrtc->clock);
-	div = DIV_ROUND_CLOSEST(clk, mode->clock * 1000);
+	/* Internal dot clock */
+	clk_in = clk_get_rate(rcrtc->clock);
+	div_in = DIV_ROUND_CLOSEST(clk_in, mode->clock * 1000);
+
+	/* External dot clock */
+	if (pdata->exclk != 0) {
+		clk_ex = pdata->exclk;
+		div_ex = DIV_ROUND_CLOSEST(clk_ex, mode->clock * 1000);
+	}
+
+	if (div_ex) {
+		/* Select recommand dot clock */
+		abs_ex = abs((mode->clock * 1000) - (clk_ex / div_ex));
+		abs_in = abs((mode->clock * 1000) - (clk_in / div_in));
+		if (abs_ex < abs_in) {
+			div = div_ex;
+			dclksel_bit = ESCR_DCLKSEL_DCLKIN;
+		} else {
+			div = div_in;
+			dclksel_bit = ESCR_DCLKSEL_CLKS;
+		}
+	} else {
+		div = div_in;
+		dclksel_bit = ESCR_DCLKSEL_CLKS;
+	}
+
+	if (dclksel_bit & ESCR_DCLKSEL_CLKS)
+		dev_dbg(rcrtc->group->dev->dev,
+		      "Internal clock is used in CRTC[%d]. Dot clock:%ldkHz\n",
+		       rcrtc->index, ((clk_in / div_in) / 1000));
+	else
+		dev_dbg(rcrtc->group->dev->dev,
+		      "External clock is used in CRTC[%d]. Dot clock:%ldkHz\n",
+		       rcrtc->index, ((clk_ex / div_ex) / 1000));
+
 	div = clamp(div, 1U, 64U) - 1;
 
-	rcar_du_group_write(rcrtc->group, rcrtc->index % 2 ? ESCR2 : ESCR,
-			    ESCR_DCLKSEL_CLKS | div);
+	rcar_du_group_write(rcrtc->group, rcrtc->index % 2 ?
+				ESCR2 : ESCR, dclksel_bit | dclkoinv_bit | div);
 	rcar_du_group_write(rcrtc->group, rcrtc->index % 2 ? OTAR2 : OTAR, 0);
 
 	/* Signal polarities */
 	value = ((mode->flags & DRM_MODE_FLAG_PVSYNC) ? 0 : DSMR_VSL)
 	      | ((mode->flags & DRM_MODE_FLAG_PHSYNC) ? 0 : DSMR_HSL)
 	      | DSMR_DIPM_DE;
-	rcar_du_crtc_write(rcrtc, DSMR, value);
+	rcar_du_crtc_write(rcrtc, DSMR, value | DSMR_CSPM); /* for HDMI */
 
 	/* Display timings */
 	rcar_du_crtc_write(rcrtc, HDSR, mode->htotal - mode->hsync_start - 19);
@@ -116,12 +163,33 @@ static void rcar_du_crtc_set_display_timing(struct rcar_du_crtc *rcrtc)
 					mode->hsync_start - 1);
 	rcar_du_crtc_write(rcrtc, HCR,  mode->htotal - 1);
 
-	rcar_du_crtc_write(rcrtc, VDSR, mode->vtotal - mode->vsync_end - 2);
-	rcar_du_crtc_write(rcrtc, VDER, mode->vtotal - mode->vsync_end +
-					mode->vdisplay - 2);
-	rcar_du_crtc_write(rcrtc, VSPR, mode->vtotal - mode->vsync_end +
-					mode->vsync_start - 1);
-	rcar_du_crtc_write(rcrtc, VCR,  mode->vtotal - 1);
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE) {
+		vdsr = (mode->vtotal / 2) - (mode->vsync_end / 2) - 2;
+		vder = (mode->vtotal / 2) - (mode->vsync_end / 2) +
+		       (mode->vdisplay / 2) - 2;
+		if (vdsr < 1) {
+			vder = vder - vdsr + 1;
+			vdsr = 1;
+		}
+		rcar_du_crtc_write(rcrtc, VDSR, vdsr);
+		rcar_du_crtc_write(rcrtc, VDER, vder);
+		rcar_du_crtc_write(rcrtc, VSPR, (mode->vtotal / 2)
+						 - (mode->vsync_end / 2)
+						 + (mode->vsync_start / 2) - 1);
+		rcar_du_crtc_write(rcrtc, VCR,  (mode->vtotal / 2) - 1);
+	} else {
+		vdsr = mode->vtotal - mode->vsync_end - 2;
+		vder = mode->vtotal - mode->vsync_end + mode->vdisplay - 2;
+		if (vdsr < 1) {
+			vder = vder - vdsr + 1;
+			vdsr = 1;
+		}
+		rcar_du_crtc_write(rcrtc, VDSR, vdsr);
+		rcar_du_crtc_write(rcrtc, VDER, vder);
+		rcar_du_crtc_write(rcrtc, VSPR, mode->vtotal - mode->vsync_end
+						 + mode->vsync_start - 1);
+		rcar_du_crtc_write(rcrtc, VCR,  mode->vtotal - 1);
+	}
 
 	rcar_du_crtc_write(rcrtc, DESR,  mode->htotal - mode->hsync_start);
 	rcar_du_crtc_write(rcrtc, DEWR,  mode->hdisplay);
@@ -176,24 +244,41 @@ void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
 		struct rcar_du_plane *plane = planes[i];
 		unsigned int index = plane->hwindex;
 
+#ifdef CONFIG_DRM_RCAR_DESKTOP_TURN_OFF
+		if (!plane->fb_plane) {
+			prio -= 4;
+			dspr |= (index + 1) << prio;
+			dptsr |= DPTSR_PnDK(index) | DPTSR_PnTS(index);
+		}
+#else
 		prio -= 4;
 		dspr |= (index + 1) << prio;
-		dptsr |= DPTSR_PnDK(index) |  DPTSR_PnTS(index);
+		dptsr |= DPTSR_PnDK(index) | DPTSR_PnTS(index);
+#endif
 
 		if (plane->format->planes == 2) {
 			index = (index + 1) % 8;
 
+#ifdef CONFIG_DRM_RCAR_DESKTOP_TURN_OFF
+			if (!plane->fb_plane) {
+				prio -= 4;
+				dspr |= (index + 1) << prio;
+				dptsr |= DPTSR_PnDK(index) | DPTSR_PnTS(index);
+			}
+#else
 			prio -= 4;
 			dspr |= (index + 1) << prio;
-			dptsr |= DPTSR_PnDK(index) |  DPTSR_PnTS(index);
+			dptsr |= DPTSR_PnDK(index) | DPTSR_PnTS(index);
+#endif
 		}
 	}
 
-	/* Select display timing and dot clock generator 2 for planes associated
-	 * with superposition controller 2.
+	/* Select display timing and dot clock generator 1 for planes associated
+	 * with superposition controller 1.
 	 */
-	if (rcrtc->index % 2) {
-		u32 value = rcar_du_group_read(rcrtc->group, DPTSR);
+	if (rcrtc->index < DU_CH_2) {
+		u32 value = DPTSR_MASK &
+			 rcar_du_group_read(rcrtc->group, DPTSR);
 
 		/* The DPTSR register is updated when the display controller is
 		 * stopped. We thus need to restart the DU. Once again, sorry
@@ -202,11 +287,18 @@ void rcar_du_crtc_update_planes(struct drm_crtc *crtc)
 		 * split, or through a module parameter). Flicker would then
 		 * occur only if we need to break the pre-association.
 		 */
-		if (value != dptsr) {
-			rcar_du_group_write(rcrtc->group, DPTSR, dptsr);
-			if (rcrtc->group->used_crtcs)
-				rcar_du_group_restart(rcrtc->group);
+		if ((rcrtc->index == DU_CH_0) && ((~value & dptsr) != dptsr)) {
+			rcar_du_group_write(rcrtc->group, DPTSR,
+					 (value & ~dptsr));
+			rcar_du_group_restart(rcrtc->group);
 		}
+		if ((rcrtc->index == DU_CH_1) && ((value & dptsr) != dptsr)) {
+			rcar_du_group_write(rcrtc->group, DPTSR,
+					 (value | dptsr));
+			rcar_du_group_restart(rcrtc->group);
+		}
+		rcrtc->dptsr_read = DPTSR_MASK &
+				 rcar_du_group_read(rcrtc->group, DPTSR);
 	}
 
 	rcar_du_group_write(rcrtc->group, rcrtc->index % 2 ? DS2PR : DS1PR,
@@ -217,6 +309,7 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 {
 	struct drm_crtc *crtc = &rcrtc->crtc;
 	unsigned int i;
+	unsigned int dptsr;
 
 	if (rcrtc->started)
 		return;
@@ -227,6 +320,16 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	/* Set display off and background to black */
 	rcar_du_crtc_write(rcrtc, DOOR, DOOR_RGB(0, 0, 0));
 	rcar_du_crtc_write(rcrtc, BPOR, BPOR_RGB(0, 0, 0));
+
+	/* Initialized DPTSR register */
+	if ((rcrtc->dptsr_init) && (rcrtc->index < DU_CH_2)) {
+		dptsr = ((CONFIG_DRM_RCAR_DU_OVERLAY_CH << DPTSR_DK_BIT_SHIFT) |
+			(CONFIG_DRM_RCAR_DU_OVERLAY_CH << DPTSR_TS_BIT_SHIFT));
+		rcar_du_group_write(rcrtc->group, DPTSR, DPTSR_MASK
+		     & (rcar_du_group_read(rcrtc->group, DPTSR) | dptsr));
+		rcar_du_group_restart(rcrtc->group);
+		rcrtc->dptsr_init = false;
+	}
 
 	/* Configure display timings and output routing */
 	rcar_du_crtc_set_display_timing(rcrtc);
@@ -244,6 +347,10 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 		if (plane->crtc != crtc || !plane->enabled)
 			continue;
 
+		if (rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE)
+			plane->interlace_flag = true;
+		else
+			plane->interlace_flag = false;
 		rcar_du_plane_setup(plane);
 	}
 
@@ -253,6 +360,19 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	 */
 	rcar_du_crtc_clr_set(rcrtc, DSYSR, DSYSR_TVM_MASK, DSYSR_TVM_MASTER);
 
+	if (rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE) {
+		if (rcrtc->index == 1)
+			rcar_du_crtc_clr_set(rcrtc, DSYSR,
+				DSYSR_SCM_INT_VIDEO, DSYSR_SCM_INT_VIDEO);
+		else
+			rcrtc->group->interlace_grp = true;
+	} else {
+		if (rcrtc->index == 1)
+			rcar_du_crtc_clr_set(rcrtc, DSYSR,
+				DSYSR_SCM_INT_VIDEO, 0);
+		else
+			rcrtc->group->interlace_grp = false;
+	}
 	rcar_du_group_start_stop(rcrtc->group, true);
 
 	rcrtc->started = true;
@@ -274,6 +394,14 @@ static void rcar_du_crtc_stop(struct rcar_du_crtc *rcrtc)
 	 * the HSYNC and VSYNC signals as inputs.
 	 */
 	rcar_du_crtc_clr_set(rcrtc, DSYSR, DSYSR_TVM_MASK, DSYSR_TVM_SWITCH);
+
+	if (rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE) {
+		if (rcrtc->index == 1)
+			rcar_du_crtc_clr_set(rcrtc,
+				DSYSR, DSYSR_SCM_INT_VIDEO, 0);
+		else
+			rcrtc->group->interlace_grp = false;
+	}
 
 	rcar_du_group_start_stop(rcrtc->group, false);
 
@@ -299,6 +427,8 @@ static void rcar_du_crtc_update_base(struct rcar_du_crtc *rcrtc)
 {
 	struct drm_crtc *crtc = &rcrtc->crtc;
 
+	rcrtc->plane->pitch = crtc->fb->pitches[0];
+
 	rcar_du_plane_compute_base(rcrtc->plane, crtc->fb);
 	rcar_du_plane_update_base(rcrtc->plane);
 }
@@ -307,7 +437,10 @@ static void rcar_du_crtc_dpms(struct drm_crtc *crtc, int mode)
 {
 	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
 
-	if (rcrtc->dpms == mode)
+	if (((rcrtc->dpms == DRM_MODE_DPMS_ON)
+		&& (mode == DRM_MODE_DPMS_ON))
+		|| ((rcrtc->dpms != DRM_MODE_DPMS_ON)
+		&& (mode != DRM_MODE_DPMS_ON)))
 		return;
 
 	if (mode == DRM_MODE_DPMS_ON) {
@@ -325,7 +458,16 @@ static bool rcar_du_crtc_mode_fixup(struct drm_crtc *crtc,
 				    const struct drm_display_mode *mode,
 				    struct drm_display_mode *adjusted_mode)
 {
-	/* TODO Fixup modes */
+	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
+	struct rcar_du_device *rcdu = rcrtc->group->dev;
+
+	/* It is prohibition to set up the width of the multiple of 16
+	   for the specification of H/W in R-Car series */
+	if ((mode) && (mode->hdisplay % 16)) {
+		dev_err(rcdu->dev,
+			"Error! width of the multiple of 16 is prohibition\n");
+		return false;
+	}
 	return true;
 }
 
@@ -371,7 +513,6 @@ static int rcar_du_crtc_mode_set(struct drm_crtc *crtc,
 		goto error;
 
 	rcrtc->plane->format = format;
-	rcrtc->plane->pitch = crtc->fb->pitches[0];
 
 	rcrtc->plane->src_x = x;
 	rcrtc->plane->src_y = y;
@@ -413,7 +554,7 @@ static int rcar_du_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	rcrtc->plane->src_x = x;
 	rcrtc->plane->src_y = y;
 
-	rcar_du_crtc_update_base(to_rcar_crtc(crtc));
+	rcar_du_crtc_update_base(rcrtc);
 
 	return 0;
 }
@@ -426,6 +567,10 @@ static void rcar_du_crtc_disable(struct drm_crtc *crtc)
 	rcar_du_plane_release(rcrtc->plane);
 }
 
+static void rcar_du_crtc_load_lut(struct drm_crtc *crtc)
+{
+}
+
 static const struct drm_crtc_helper_funcs crtc_helper_funcs = {
 	.dpms = rcar_du_crtc_dpms,
 	.mode_fixup = rcar_du_crtc_mode_fixup,
@@ -434,6 +579,7 @@ static const struct drm_crtc_helper_funcs crtc_helper_funcs = {
 	.mode_set = rcar_du_crtc_mode_set,
 	.mode_set_base = rcar_du_crtc_mode_set_base,
 	.disable = rcar_du_crtc_disable,
+	.load_lut = rcar_du_crtc_load_lut,
 };
 
 void rcar_du_crtc_cancel_page_flip(struct rcar_du_crtc *rcrtc,
@@ -477,6 +623,20 @@ static void rcar_du_crtc_finish_page_flip(struct rcar_du_crtc *rcrtc)
 	drm_vblank_put(dev, rcrtc->index);
 }
 
+int rcar_du_get_frmend(unsigned int ch)
+{
+	if (ch < RCAR_DU_MAX_CH)
+		return du_frmend[ch];
+	else
+		return -EINVAL;
+}
+EXPORT_SYMBOL(rcar_du_get_frmend);
+
+static void rcar_du_set_frmend(int frmend, unsigned int ch)
+{
+	du_frmend[ch] = frmend;
+}
+
 static irqreturn_t rcar_du_crtc_irq(int irq, void *arg)
 {
 	struct rcar_du_crtc *rcrtc = arg;
@@ -486,18 +646,21 @@ static irqreturn_t rcar_du_crtc_irq(int irq, void *arg)
 	status = rcar_du_crtc_read(rcrtc, DSSR);
 	rcar_du_crtc_write(rcrtc, DSRCR, status & DSRCR_MASK);
 
-	if (status & DSSR_VBK) {
+	if (status & DSSR_FRM) {
 		drm_handle_vblank(rcrtc->crtc.dev, rcrtc->index);
 		rcar_du_crtc_finish_page_flip(rcrtc);
 		ret = IRQ_HANDLED;
 	}
+
+	rcar_du_set_frmend((status & DSSR_FRM) ? 1 : 0, rcrtc->index);
 
 	return ret;
 }
 
 static int rcar_du_crtc_page_flip(struct drm_crtc *crtc,
 				  struct drm_framebuffer *fb,
-				  struct drm_pending_vblank_event *event)
+				  struct drm_pending_vblank_event *event,
+				  uint32_t page_flip_flags)
 {
 	struct rcar_du_crtc *rcrtc = to_rcar_crtc(crtc);
 	struct drm_device *dev = rcrtc->crtc.dev;
@@ -545,6 +708,8 @@ int rcar_du_crtc_create(struct rcar_du_group *rgrp, unsigned int index)
 	char *name;
 	int irq;
 	int ret;
+	const struct rcar_du_crtc_data *pdata =
+			&rgrp->dev->pdata->crtcs[index];
 
 	/* Get the CRTC clock. */
 	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_CRTC_IRQ_CLOCK)) {
@@ -565,12 +730,46 @@ int rcar_du_crtc_create(struct rcar_du_group *rgrp, unsigned int index)
 	rcrtc->index = index;
 	rcrtc->dpms = DRM_MODE_DPMS_OFF;
 	rcrtc->plane = &rgrp->planes.planes[index % 2];
+	rcrtc->lvds_ch = -1;
 
+	if (pdata->init_conn_type)
+		crtc->connector_type = pdata->init_conn_type;
+	else
+		crtc->connector_type = DRM_MODE_CONNECTOR_Unknown;
+
+#if !defined(CONFIG_DRM_ADV7511) && !defined(CONFIG_DRM_ADV7511_MODULE)
+	if ((pdata->init_conn_type) &&
+		(crtc->connector_type == DRM_MODE_CONNECTOR_HDMIA)) {
+		if (rcdu->info->chip == RCAR_H2)
+			crtc->connector_type = DRM_MODE_CONNECTOR_VGA;
+		if ((rcdu->info->chip == RCAR_M2) ||
+			(rcdu->info->chip == RCAR_M2N))
+			crtc->connector_type = DRM_MODE_CONNECTOR_Unknown;
+		if (rcdu->info->chip == RCAR_E2)
+			crtc->connector_type = DRM_MODE_CONNECTOR_LVDS;
+	}
+#endif
+#ifndef CONFIG_DRM_RCAR_LVDS
+	if (pdata->init_conn_type) {
+		if ((crtc->connector_type == DRM_MODE_CONNECTOR_HDMIA) &&
+			(rcdu->info->chip == RCAR_H2))
+			crtc->connector_type = DRM_MODE_CONNECTOR_VGA;
+		if ((crtc->connector_type == DRM_MODE_CONNECTOR_LVDS) &&
+			((rcdu->info->chip == RCAR_M2) ||
+			(rcdu->info->chip == RCAR_M2N) ||
+			(rcdu->info->chip == RCAR_E2)))
+			crtc->connector_type = DRM_MODE_CONNECTOR_Unknown;
+	}
+#endif
 	rcrtc->plane->crtc = crtc;
+	rcrtc->plane->fb_plane = true;
+	rcrtc->dptsr_init = true;
 
 	ret = drm_crtc_init(rcdu->ddev, crtc, &crtc_funcs);
 	if (ret < 0)
 		return ret;
+
+	rcdu->crtcs_connect_id[index] = rcrtc->plane->crtc->base.id;
 
 	drm_crtc_helper_add(crtc, &crtc_helper_funcs);
 
@@ -587,6 +786,8 @@ int rcar_du_crtc_create(struct rcar_du_group *rgrp, unsigned int index)
 		dev_err(rcdu->dev, "no IRQ for CRTC %u\n", index);
 		return ret;
 	}
+
+	rcdu->ddev->irq_enabled = true;
 
 	ret = devm_request_irq(rcdu->dev, irq, rcar_du_crtc_irq, irqflags,
 			       dev_name(rcdu->dev), rcrtc);

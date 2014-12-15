@@ -1,7 +1,7 @@
 /*
  * rcar_du_drv.c  --  R-Car Display Unit DRM driver
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -23,12 +23,25 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_encoder_slave.h>
 
 #include "rcar_du_crtc.h"
 #include "rcar_du_drv.h"
+#include "rcar_du_encoder.h"
 #include "rcar_du_kms.h"
 #include "rcar_du_regs.h"
+#include "rcar_du_lvdsenc.h"
+#include "rcar_lvds_regs.h"
 
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND) || \
+	defined(R8A7790_ES1_DU_ALIGN_128B_WORKAROUND)
+#define PRODUCT_REGISTER	0xFF000044
+#define PRODUCT_CUT_MASK	(0x00007FF0)
+#define PRODUCT_H2_BIT		(0x45 << 8)
+#define PRODUCT_M2_BIT		(0x47 << 8)
+#define CUT_ES2X_BIT		(0x00000010)
+#endif
 /* -----------------------------------------------------------------------------
  * DRM operations
  */
@@ -47,6 +60,9 @@ static int rcar_du_unload(struct drm_device *dev)
 	dev->irq_enabled = 0;
 	dev->dev_private = NULL;
 
+	if (rcdu->pdata->backlight_off)
+		rcdu->pdata->backlight_off();
+
 	return 0;
 }
 
@@ -56,6 +72,11 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 	struct rcar_du_platform_data *pdata = pdev->dev.platform_data;
 	struct rcar_du_device *rcdu;
 	struct resource *mem;
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND) || \
+	defined(R8A7790_ES1_DU_ALIGN_128B_WORKAROUND)
+	void __iomem *product_reg;
+#endif
 	int ret;
 
 	if (pdata == NULL) {
@@ -74,6 +95,47 @@ static int rcar_du_load(struct drm_device *dev, unsigned long flags)
 	rcdu->info = (struct rcar_du_device_info *)pdev->id_entry->driver_data;
 	rcdu->ddev = dev;
 	dev->dev_private = rcdu;
+	rcdu->dpad0_source = rcdu->info->drgbs_bit;
+
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND) || \
+	defined(R8A7790_ES1_DU_ALIGN_128B_WORKAROUND)
+
+	product_reg = ioremap_nocache(PRODUCT_REGISTER, 0x04);
+	if (!product_reg)
+		return -ENOMEM;
+
+#ifdef R8A7790_ES1_DU_ALIGN_128B_WORKAROUND
+	/* Add the workaround of 128 byte align in R-Car H2 ES1.0. */
+	if ((readl(product_reg) & PRODUCT_CUT_MASK) == PRODUCT_H2_BIT)
+		rcdu->info->quirks = rcdu->info->quirks |
+					 RCAR_DU_QUIRK_ALIGN_128B;
+#endif
+#ifdef R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND
+	/* Add the workaround of LVDS lane mis-connection in R-Car H2 ES1.x. */
+	if ((readl(product_reg) & PRODUCT_CUT_MASK) == PRODUCT_H2_BIT)
+		rcdu->info->quirks = rcdu->info->quirks |
+					 RCAR_DU_QUIRK_LVDS_LANES;
+#endif
+#ifdef R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND
+	/* Add the workaround of LVDS CH data gap
+		in R-Car H2 ES2.x. and R-Car M2 ES2.x. */
+	if ((readl(product_reg) & PRODUCT_CUT_MASK)
+		 == (PRODUCT_H2_BIT | CUT_ES2X_BIT)) {
+		rcdu->info->cpu_clk_time_ps = 1000000000000 / 1400000000;
+		rcdu->info->quirks = rcdu->info->quirks |
+					 RCAR_DU_QUIRK_LVDS_CH_DATA_GAP;
+
+	} else if ((readl(product_reg) & PRODUCT_CUT_MASK)
+		 == (PRODUCT_M2_BIT | CUT_ES2X_BIT)) {
+		rcdu->info->cpu_clk_time_ps = 1000000000000 / 1500000000;
+		rcdu->info->quirks = rcdu->info->quirks |
+					 RCAR_DU_QUIRK_LVDS_CH_DATA_GAP;
+	} else
+		rcdu->info->cpu_clk_time_ps = 0;
+#endif
+	iounmap(product_reg);
+#endif
 
 	/* I/O resources */
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -148,7 +210,6 @@ static const struct file_operations rcar_du_fops = {
 #endif
 	.poll		= drm_poll,
 	.read		= drm_read,
-	.fasync		= drm_fasync,
 	.llseek		= no_llseek,
 	.mmap		= drm_gem_cma_mmap,
 };
@@ -166,11 +227,16 @@ static struct drm_driver rcar_du_driver = {
 	.gem_vm_ops		= &drm_gem_cma_vm_ops,
 	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
-	.gem_prime_import	= drm_gem_cma_dmabuf_import,
-	.gem_prime_export	= drm_gem_cma_dmabuf_export,
+	.gem_prime_import	= drm_gem_prime_import,
+	.gem_prime_export	= drm_gem_prime_export,
+	.gem_prime_get_sg_table	= drm_gem_cma_prime_get_sg_table,
+	.gem_prime_import_sg_table = drm_gem_cma_prime_import_sg_table,
+	.gem_prime_vmap		= drm_gem_cma_prime_vmap,
+	.gem_prime_vunmap	= drm_gem_cma_prime_vunmap,
+	.gem_prime_mmap		= drm_gem_cma_prime_mmap,
 	.dumb_create		= rcar_du_dumb_create,
 	.dumb_map_offset	= drm_gem_cma_dumb_map_offset,
-	.dumb_destroy		= drm_gem_cma_dumb_destroy,
+	.dumb_destroy		= drm_gem_dumb_destroy,
 	.fops			= &rcar_du_fops,
 	.name			= "rcar-du",
 	.desc			= "Renesas R-Car Display Unit",
@@ -187,9 +253,30 @@ static struct drm_driver rcar_du_driver = {
 static int rcar_du_pm_suspend(struct device *dev)
 {
 	struct rcar_du_device *rcdu = dev_get_drvdata(dev);
+	struct drm_encoder *encoder;
+	int i;
+
+	encoder = NULL;
 
 	drm_kms_helper_poll_disable(rcdu->ddev);
-	/* TODO Suspend the CRTC */
+
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+	list_for_each_entry(encoder,
+			 &rcdu->ddev->mode_config.encoder_list, head) {
+		if ((encoder->encoder_type == DRM_MODE_ENCODER_TMDS) &&
+			(get_rcar_slave_funcs(encoder)->dpms))
+			get_rcar_slave_funcs(encoder)->dpms(encoder,
+						 DRM_MODE_DPMS_OFF);
+	}
+#endif
+#ifdef CONFIG_DRM_RCAR_LVDS
+	for (i = 0; i < rcdu->info->num_lvds; ++i) {
+		if (rcdu->lvds[i])
+			rcar_du_lvdsenc_stop_suspend(rcdu->lvds[i]);
+	}
+#endif
+	for (i = 0; i < rcdu->pdata->num_crtcs; ++i)
+		rcar_du_crtc_suspend(&rcdu->crtcs[i]);
 
 	return 0;
 }
@@ -197,10 +284,34 @@ static int rcar_du_pm_suspend(struct device *dev)
 static int rcar_du_pm_resume(struct device *dev)
 {
 	struct rcar_du_device *rcdu = dev_get_drvdata(dev);
+	struct drm_encoder *encoder;
+	int i;
 
-	/* TODO Resume the CRTC */
+	encoder = NULL;
 
+	for (i = 0; i < rcdu->pdata->num_crtcs; ++i)
+		rcar_du_crtc_resume(&rcdu->crtcs[i]);
+
+#ifdef CONFIG_DRM_RCAR_LVDS
+	for (i = 0; i < rcdu->pdata->num_crtcs; ++i) {
+		if (rcdu->crtcs[i].lvds_ch >= 0)
+			rcar_du_lvdsenc_start(
+					rcdu->lvds[rcdu->crtcs[i].lvds_ch],
+					&rcdu->crtcs[i]);
+	}
+#endif
+
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+	list_for_each_entry(encoder,
+			 &rcdu->ddev->mode_config.encoder_list, head) {
+		if ((encoder->encoder_type == DRM_MODE_ENCODER_TMDS) &&
+			(get_rcar_slave_funcs(encoder)->dpms))
+			get_rcar_slave_funcs(encoder)->dpms(encoder,
+						 DRM_MODE_DPMS_ON);
+	}
+#endif
 	drm_kms_helper_poll_enable(rcdu->ddev);
+
 	return 0;
 }
 #endif
@@ -225,7 +336,12 @@ static int rcar_du_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND)
+static struct rcar_du_device_info rcar_du_r8a7779_info = {
+#else
 static const struct rcar_du_device_info rcar_du_r8a7779_info = {
+#endif
 	.features = 0,
 	.num_crtcs = 2,
 	.routes = {
@@ -242,11 +358,18 @@ static const struct rcar_du_device_info rcar_du_r8a7779_info = {
 		},
 	},
 	.num_lvds = 0,
+	.chip = RCAR_H1,
 };
 
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND) || \
+	defined(R8A7790_ES1_DU_ALIGN_128B_WORKAROUND)
+static struct rcar_du_device_info rcar_du_r8a7790_info = {
+#else
 static const struct rcar_du_device_info rcar_du_r8a7790_info = {
-	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_ALIGN_128B
-		  | RCAR_DU_FEATURE_DEFR8,
+#endif
+	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
+		    RCAR_DU_FEATURE_VSP1_SOURCE,
 	.num_crtcs = 3,
 	.routes = {
 		/* R8A7790 has one RGB output, two LVDS outputs and one
@@ -254,23 +377,170 @@ static const struct rcar_du_device_info rcar_du_r8a7790_info = {
 		 */
 		[RCAR_DU_OUTPUT_DPAD0] = {
 			.possible_crtcs = BIT(2) | BIT(1) | BIT(0),
+#if (defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)) \
+	&& defined(CONFIG_DRM_RCAR_LVDS)
+			.possible_clones = BIT(2) | BIT(0),
+#elif defined(CONFIG_DRM_RCAR_LVDS)
+			.possible_clones = BIT(1),
+#else
+			.possible_clones = 0,
+#endif
 			.encoder_type = DRM_MODE_ENCODER_NONE,
 		},
 		[RCAR_DU_OUTPUT_LVDS0] = {
 			.possible_crtcs = BIT(0),
+			.possible_clones = 0,
 			.encoder_type = DRM_MODE_ENCODER_LVDS,
 		},
 		[RCAR_DU_OUTPUT_LVDS1] = {
 			.possible_crtcs = BIT(2) | BIT(1),
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+			.possible_clones = BIT(1),
+#else
+			.possible_clones = 0,
+#endif
 			.encoder_type = DRM_MODE_ENCODER_LVDS,
 		},
 	},
 	.num_lvds = 2,
+	.drgbs_bit = 0,
+	.max_xres = 1920,
+	.max_yres = 1080,
+	.interlace = false,
+	.lvds0_crtc = BIT(0),
+	.lvds1_crtc = BIT(1) | BIT(2),
+	.vspd_crtc = BIT(0) | BIT(1),
+	.chip = RCAR_H2,
+	.drgbs_use = true,
+	.vscs_use = true,
+};
+
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND)
+static struct rcar_du_device_info rcar_du_r8a7791_info = {
+#else
+static const struct rcar_du_device_info rcar_du_r8a7791_info = {
+#endif
+	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
+		    RCAR_DU_FEATURE_VSP1_SOURCE,
+	.num_crtcs = 2,
+	.routes = {
+		/* R8A7791 has one RGB output, one LVDS output and one
+		 * (currently unsupported) TCON output.
+		 */
+		[RCAR_DU_OUTPUT_LVDS0] = {
+			.possible_crtcs = BIT(0),
+			.possible_clones = 0,
+			.encoder_type = DRM_MODE_ENCODER_LVDS,
+		},
+		[RCAR_DU_OUTPUT_DPAD0] = {
+			.possible_crtcs = BIT(1),
+			.possible_clones = 0,
+			.encoder_type = DRM_MODE_ENCODER_NONE,
+		},
+	},
+	.num_lvds = 1,
+	.drgbs_bit = 1,
+	.max_xres = 1920,
+	.max_yres = 1080,
+	.interlace = true,
+	.lvds0_crtc = BIT(0),
+	.lvds1_crtc = 0,
+	.vspd_crtc = BIT(0) | BIT(1),
+	.chip = RCAR_M2,
+	.drgbs_use = true,
+	.vscs_use = false,
+};
+
+#if defined(R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND) || \
+	defined(R8A779X_ES2_DU_LVDS_CH_DATA_GAP_WORKAROUND)
+static struct rcar_du_device_info rcar_du_r8a7793_info = {
+#else
+static const struct rcar_du_device_info rcar_du_r8a7793_info = {
+#endif
+	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
+		    RCAR_DU_FEATURE_VSP1_SOURCE,
+	.num_crtcs = 2,
+	.routes = {
+		/* R8A7793 has one RGB output, one LVDS output and one
+		 * (currently unsupported) TCON output.
+		 */
+		[RCAR_DU_OUTPUT_LVDS0] = {
+			.possible_crtcs = BIT(0),
+			.possible_clones = 0,
+			.encoder_type = DRM_MODE_ENCODER_LVDS,
+		},
+		[RCAR_DU_OUTPUT_DPAD0] = {
+			.possible_crtcs = BIT(1),
+			.possible_clones = 0,
+			.encoder_type = DRM_MODE_ENCODER_NONE,
+		},
+	},
+	.num_lvds = 1,
+	.drgbs_bit = 1,
+	.max_xres = 1920,
+	.max_yres = 1080,
+	.interlace = true,
+	.lvds0_crtc = BIT(0),
+	.lvds1_crtc = 0,
+	.vspd_crtc = BIT(0) | BIT(1),
+	.chip = RCAR_M2N,
+	.drgbs_use = true,
+	.vscs_use = false,
+};
+
+#ifdef R8A7790_ES1_DU_LVDS_LANE_MISCONNECTION_WORKAROUND
+static struct rcar_du_device_info rcar_du_r8a7794_info = {
+#else
+static const struct rcar_du_device_info rcar_du_r8a7794_info = {
+#endif
+	.features = RCAR_DU_FEATURE_CRTC_IRQ_CLOCK | RCAR_DU_FEATURE_DEFR8 |
+		    RCAR_DU_FEATURE_VSP1_SOURCE,
+	.num_crtcs = 2,
+	.routes = {
+		[RCAR_DU_OUTPUT_DPAD0] = {
+			.possible_crtcs = BIT(0),
+#ifdef CONFIG_DRM_RCAR_LVDS
+			.possible_clones = BIT(1),
+#else
+			.possible_clones = 0,
+#endif
+			.encoder_type = RCAR_DU_ENCODER_HDMI,
+		},
+		[RCAR_DU_OUTPUT_LVDS0] = {
+			.possible_crtcs = BIT(0),
+#if defined(CONFIG_DRM_ADV7511) || defined(CONFIG_DRM_ADV7511_MODULE)
+			.possible_clones = BIT(0),
+#else
+			.possible_clones = 0,
+#endif
+			.encoder_type = DRM_MODE_ENCODER_LVDS,
+		},
+		[RCAR_DU_OUTPUT_DPAD1] = {
+			.possible_crtcs = BIT(1),
+			.possible_clones = 0,
+			.encoder_type = DRM_MODE_ENCODER_DAC,
+		},
+	},
+	.num_lvds = 0,
+	.drgbs_bit = 0,
+	.max_xres = 1920,
+	.max_yres = 1080,
+	.interlace = true,
+	.lvds0_crtc = 0,
+	.lvds1_crtc = 0,
+	.vspd_crtc = BIT(0),
+	.chip = RCAR_E2,
+	.drgbs_use = false,
+	.vscs_use = false,
 };
 
 static const struct platform_device_id rcar_du_id_table[] = {
 	{ "rcar-du-r8a7779", (kernel_ulong_t)&rcar_du_r8a7779_info },
 	{ "rcar-du-r8a7790", (kernel_ulong_t)&rcar_du_r8a7790_info },
+	{ "rcar-du-r8a7791", (kernel_ulong_t)&rcar_du_r8a7791_info },
+	{ "rcar-du-r8a7793", (kernel_ulong_t)&rcar_du_r8a7793_info },
+	{ "rcar-du-r8a7794", (kernel_ulong_t)&rcar_du_r8a7794_info },
 	{ }
 };
 

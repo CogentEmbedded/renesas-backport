@@ -34,6 +34,7 @@
 #define DSYSR_SCM_INT_NONE	(0 << 4)
 #define DSYSR_SCM_INT_SYNC	(2 << 4)
 #define DSYSR_SCM_INT_VIDEO	(3 << 4)
+#define DSYSR_SCM_MASK		(3 << 4)
 
 #define DSMR			0x00004
 #define DSMR_VSPM		(1 << 28)
@@ -231,6 +232,7 @@
 #define DEFR8			0x20020
 #define DEFR8_CODE		(0x7790 << 16)
 #define DEFR8_VSCS		(1 << 6)
+#define DEFR8_VSCS_MASK		(1 << 6)
 #define DEFR8_DRGBS_DU(n)	((n) << 4)
 #define DEFR8_DRGBS_MASK	(3 << 4)
 #define DEFR8_DEFE8		(1 << 0)
@@ -321,6 +323,7 @@
 #define PnMR_SPIM_ALP		(1 << 12)	/* Alpha Blending */
 #define PnMR_SPIM_EOR		(2 << 12)	/* EOR */
 #define PnMR_SPIM_TP_OFF	(1 << 14)	/* No Transparent Color */
+#define PnMR_SPIM_MASK		(3 << 12)
 #define PnMR_CPSL_CP1		(0 << 8)	/* Color Palette selected 1 */
 #define PnMR_CPSL_CP2		(1 << 8)	/* Color Palette selected 2 */
 #define PnMR_CPSL_CP3		(2 << 8)	/* Color Palette selected 3 */
@@ -388,6 +391,7 @@
 
 #define PnDDCR4			0x00190
 #define PnDDCR4_CODE		(0x7766 << 16)
+#define PnDDCR4_VSPS		(1 << 13)
 #define PnDDCR4_SDFS_RGB	(0 << 4)
 #define PnDDCR4_SDFS_YC		(5 << 4)
 #define PnDDCR4_SDFS_MASK	(7 << 4)
@@ -489,6 +493,9 @@
 #define DPTSR			0x11004
 #define DPTSR_PnDK(n)		(1 << ((n) + 16))
 #define DPTSR_PnTS(n)		(1 << (n))
+#define DPTSR_MASK		0x00FF00FF
+#define DPTSR_DK_BIT_SHIFT	(16)
+#define DPTSR_TS_BIT_SHIFT	(0)
 
 #define DAPTSR			0x11008
 #define DAPTSR_APnDK(n)		(1 << ((n) + 16))

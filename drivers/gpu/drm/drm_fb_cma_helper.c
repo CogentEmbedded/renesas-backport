@@ -1,6 +1,7 @@
 /*
  * drm kms/fb cma (contiguous memory allocator) helper functions
  *
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  * Copyright (C) 2012 Analog Device Inc.
  *   Author: Lars-Peter Clausen <lars@metafoo.de>
  *
@@ -33,6 +34,7 @@ struct drm_fb_cma {
 struct drm_fbdev_cma {
 	struct drm_fb_helper	fb_helper;
 	struct drm_fb_cma	*fb;
+	unsigned int		fb_size_mult;
 };
 
 static inline struct drm_fbdev_cma *to_fbdev_cma(struct drm_fb_helper *helper)
@@ -211,6 +213,10 @@ int drm_fb_cma_debugfs_show(struct seq_file *m, void *arg)
 	struct drm_device *dev = node->minor->dev;
 	struct drm_framebuffer *fb;
 	int ret;
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	unsigned int align;
+	unsigned int align_width_size, align_height_size;
+#endif
 
 	ret = mutex_lock_interruptible(&dev->mode_config.mutex);
 	if (ret)
@@ -242,6 +248,7 @@ static struct fb_ops drm_fbdev_cma_ops = {
 	.fb_set_par	= drm_fb_helper_set_par,
 	.fb_blank	= drm_fb_helper_blank,
 	.fb_pan_display	= drm_fb_helper_pan_display,
+	.fb_ioctl	= drm_fb_helper_ioctl,
 	.fb_setcmap	= drm_fb_helper_setcmap,
 };
 
@@ -258,6 +265,10 @@ static int drm_fbdev_cma_create(struct drm_fb_helper *helper,
 	struct fb_info *fbi;
 	size_t size;
 	int ret;
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	unsigned int align;
+	unsigned int align_width_size, align_height_size;
+#endif
 
 	DRM_DEBUG_KMS("surface width(%d), height(%d) and bpp(%d)\n",
 			sizes->surface_width, sizes->surface_height,
@@ -266,12 +277,29 @@ static int drm_fbdev_cma_create(struct drm_fb_helper *helper,
 	bytes_per_pixel = DIV_ROUND_UP(sizes->surface_bpp, 8);
 
 	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height;
+	mode_cmd.height = sizes->surface_height * fbdev_cma->fb_size_mult;
 	mode_cmd.pitches[0] = sizes->surface_width * bytes_per_pixel;
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 		sizes->surface_depth);
 
 	size = mode_cmd.pitches[0] * mode_cmd.height;
+
+#if defined(CONFIG_DRM_RCAR_DU) || defined(CONFIG_DRM_RCAR_DU_MODULE)
+	align = 4 * 1024;
+	if ((sizes->surface_width * sizes->surface_height * bytes_per_pixel)
+		& (align - 1)) {
+		align = 32;
+		align_width_size = (sizes->surface_width + (align - 1)) /
+				 align * align;
+
+		if (sizes->surface_bpp == 16)
+			align = 64;
+		align_height_size = (sizes->surface_height + (align - 1)) /
+				align * align;
+		size = align_width_size * align_height_size * bytes_per_pixel *
+				fbdev_cma->fb_size_mult;
+	}
+#endif
 	obj = drm_gem_cma_create(dev, size);
 	if (IS_ERR(obj))
 		return -ENOMEM;
@@ -305,7 +333,8 @@ static int drm_fbdev_cma_create(struct drm_fb_helper *helper,
 	}
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
-	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height);
+	drm_fb_helper_fill_var(fbi, helper, sizes->surface_width,
+			       sizes->surface_height);
 
 	offset = fbi->var.xoffset * bytes_per_pixel;
 	offset += fbi->var.yoffset * fb->pitches[0];
@@ -338,12 +367,13 @@ static struct drm_fb_helper_funcs drm_fb_cma_helper_funcs = {
  * @preferred_bpp: Preferred bits per pixel for the device
  * @num_crtc: Number of CRTCs
  * @max_conn_count: Maximum number of connectors
+ * @fb_size_mult: Frame buffer height size multiplier
  *
  * Returns a newly allocated drm_fbdev_cma struct or a ERR_PTR.
  */
 struct drm_fbdev_cma *drm_fbdev_cma_init(struct drm_device *dev,
 	unsigned int preferred_bpp, unsigned int num_crtc,
-	unsigned int max_conn_count)
+	unsigned int max_conn_count, unsigned int fb_size_mult)
 {
 	struct drm_fbdev_cma *fbdev_cma;
 	struct drm_fb_helper *helper;
@@ -355,6 +385,7 @@ struct drm_fbdev_cma *drm_fbdev_cma_init(struct drm_device *dev,
 		return ERR_PTR(-ENOMEM);
 	}
 
+	fbdev_cma->fb_size_mult = fb_size_mult;
 	fbdev_cma->fb_helper.funcs = &drm_fb_cma_helper_funcs;
 	helper = &fbdev_cma->fb_helper;
 

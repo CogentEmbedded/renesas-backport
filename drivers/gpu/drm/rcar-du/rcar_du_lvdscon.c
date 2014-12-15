@@ -1,7 +1,7 @@
 /*
  * rcar_du_lvdscon.c  --  R-Car Display Unit LVDS Connector
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -14,6 +14,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_encoder_slave.h>
 
 #include "rcar_du_drv.h"
 #include "rcar_du_encoder.h"
@@ -96,6 +97,12 @@ int rcar_du_lvds_connector_init(struct rcar_du_device *rcdu,
 	struct drm_connector *connector;
 	int ret;
 
+	if (rcdu->pdata->backlight_on) {
+		ret = rcdu->pdata->backlight_on();
+		if (ret < 0)
+			return ret;
+	}
+
 	lvdscon = devm_kzalloc(rcdu->dev, sizeof(*lvdscon), GFP_KERNEL);
 	if (lvdscon == NULL)
 		return -ENOMEM;
@@ -120,11 +127,11 @@ int rcar_du_lvds_connector_init(struct rcar_du_device *rcdu,
 	drm_object_property_set_value(&connector->base,
 		rcdu->ddev->mode_config.dpms_property, DRM_MODE_DPMS_OFF);
 
-	ret = drm_mode_connector_attach_encoder(connector, &renc->encoder);
+	ret = drm_mode_connector_attach_encoder(connector, renc->encoder);
 	if (ret < 0)
 		return ret;
 
-	connector->encoder = &renc->encoder;
+	connector->encoder = renc->encoder;
 	lvdscon->connector.encoder = renc;
 
 	return 0;

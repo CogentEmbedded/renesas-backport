@@ -7,6 +7,7 @@
  */
 
 /*
+ * Copyright (C) 2014 Renesas Electronics Corporation
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
  * Copyright (c) 2009-2010, Code Aurora Forum.
@@ -455,6 +456,9 @@ struct drm_file {
 	 */
 	struct list_head fbs;
 	struct mutex fbs_lock;
+
+	struct list_head sources;
+	struct mutex sources_lock;
 
 	wait_queue_head_t event_wait;
 	struct list_head event_list;
@@ -950,6 +954,8 @@ struct drm_driver {
 				struct sg_table *sgt);
 	void *(*gem_prime_vmap)(struct drm_gem_object *obj);
 	void (*gem_prime_vunmap)(struct drm_gem_object *obj, void *vaddr);
+	int (*gem_prime_mmap)(struct drm_gem_object *obj,
+				struct vm_area_struct *vma);
 
 	/* vga arb irq handler */
 	void (*vgaarb_irq)(struct drm_device *dev, bool state);
@@ -1216,6 +1222,9 @@ struct drm_device {
 	int switch_power_state;
 
 	atomic_t unplugged; /* device has been unplugged or gone away */
+#ifdef CONFIG_DRM_FBDEV_CRTC
+	unsigned int fbdev_crtc;
+#endif
 };
 
 #define DRM_SWITCH_POWER_ON 0

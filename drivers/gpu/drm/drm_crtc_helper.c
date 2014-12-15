@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  * Copyright (c) 2006-2008 Intel Corporation
  * Copyright (c) 2007 Dave Airlie <airlied@linux.ie>
  *
@@ -168,6 +169,10 @@ int drm_helper_probe_single_connector_modes(struct drm_connector *connector,
 #endif
 		count = (*connector_funcs->get_modes)(connector);
 
+	if (count < 0) {
+		DRM_ERROR("Failed to get mode list.\n");
+		return count;
+	}
 	if (count == 0 && connector->status == connector_status_connected)
 		count = drm_add_modes_noedid(connector, 1024, 768);
 	if (count == 0)
@@ -175,9 +180,11 @@ int drm_helper_probe_single_connector_modes(struct drm_connector *connector,
 
 	drm_mode_connector_list_update(connector);
 
+#if !defined(CONFIG_DRM_FBDEV_CRTC)
 	if (maxX && maxY)
 		drm_mode_validate_size(dev, &connector->modes, maxX,
 				       maxY, 0);
+#endif
 
 	if (connector->interlace_allowed)
 		mode_flags |= DRM_MODE_FLAG_INTERLACE;
@@ -667,6 +674,25 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set)
 			fb_changed = true;
 	}
 
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+	/* when there is change by fb_set_par */
+	switch (set->mode->private_flags) {
+	case DRM_FB_CHANGED:
+		fb_changed = true;
+		break;
+	case DRM_MODE_CHANGED:
+		mode_changed = true;
+		break;
+	case DRM_FB_PANDISPLAY:
+		mode_changed = false;
+		fb_changed = true;
+		set->mode->private_flags = false;
+		goto fbdev_access;
+	default:
+		break;
+	}
+	set->mode->private_flags = false;
+#endif
 	if (set->x != set->crtc->x || set->y != set->crtc->y)
 		fb_changed = true;
 
@@ -752,6 +778,9 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set)
 	if (fb_changed && !crtc_funcs->mode_set_base)
 		mode_changed = true;
 
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+fbdev_access:
+#endif
 	if (mode_changed) {
 		set->crtc->enabled = drm_helper_crtc_in_use(set->crtc);
 		if (set->crtc->enabled) {

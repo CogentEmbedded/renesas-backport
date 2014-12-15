@@ -162,6 +162,15 @@ config DRM_SAVAGE
 	  Choose this option if you have a Savage3D/4/SuperSavage/Pro/Twister
 	  chipset. If M is selected the module will be called savage.
 
+config DRM_FBDEV_CRTC
+	bool "Enable FBDev CRTC select"
+	depends on DRM_KMS_HELPER
+	help
+	  Choose this option if you want to use fbdev access
+	  every CRTC.
+	  If you want to use FBDev every CRTC, you select y.
+	  If you want to not use FBDev every CRTC, you select n.
+
 source "drivers/gpu/drm/exynos/Kconfig"
 
 source "drivers/gpu/drm/vmwgfx/Kconfig"

@@ -239,6 +239,8 @@ static int drm_open_helper(struct inode *inode, struct file *filp,
 	INIT_LIST_HEAD(&priv->lhead);
 	INIT_LIST_HEAD(&priv->fbs);
 	mutex_init(&priv->fbs_lock);
+	INIT_LIST_HEAD(&priv->sources);
+	mutex_init(&priv->sources_lock);
 	INIT_LIST_HEAD(&priv->event_list);
 	init_waitqueue_head(&priv->event_wait);
 	priv->event_space = 4096; /* set aside 4k for event buffer */
@@ -450,6 +452,9 @@ int drm_release(struct inode *inode, struct file *filp)
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev = file_priv->minor->dev;
 	int retcode = 0;
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+	struct drm_crtc *crtc;
+#endif
 
 	mutex_lock(&drm_global_mutex);
 
@@ -458,6 +463,10 @@ int drm_release(struct inode *inode, struct file *filp)
 	if (dev->driver->preclose)
 		dev->driver->preclose(dev, file_priv);
 
+#if defined(CONFIG_DRM_FBDEV_CRTC)
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
+		crtc->flip_id = -1;
+#endif
 	/* ========================================================
 	 * Begin inline drm_release
 	 */
@@ -481,8 +490,10 @@ int drm_release(struct inode *inode, struct file *filp)
 
 	drm_events_release(file_priv);
 
-	if (dev->driver->driver_features & DRIVER_MODESET)
+	if (dev->driver->driver_features & DRIVER_MODESET) {
 		drm_fb_release(file_priv);
+		drm_live_sources_release(file_priv);
+	}
 
 	if (dev->driver->driver_features & DRIVER_GEM)
 		drm_gem_release(dev, file_priv);

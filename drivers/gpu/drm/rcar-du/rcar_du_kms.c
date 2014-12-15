@@ -1,7 +1,7 @@
 /*
  * rcar_du_kms.c  --  R-Car Display Unit Mode Setting
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -11,11 +11,14 @@
  * (at your option) any later version.
  */
 
+#include <linux/moduleparam.h>
+
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_encoder_slave.h>
 
 #include "rcar_du_crtc.h"
 #include "rcar_du_drv.h"
@@ -23,6 +26,9 @@
 #include "rcar_du_kms.h"
 #include "rcar_du_lvdsenc.h"
 #include "rcar_du_regs.h"
+
+static bool rcar_du_fbdev_pan = true;
+module_param_named(fb_cma_pan, rcar_du_fbdev_pan, bool, 0444);
 
 /* -----------------------------------------------------------------------------
  * Format helpers
@@ -33,7 +39,7 @@ static const struct rcar_du_format_info rcar_du_format_infos[] = {
 		.fourcc = DRM_FORMAT_RGB565,
 		.bpp = 16,
 		.planes = 1,
-		.pnmr = PnMR_SPIM_TP | PnMR_DDDF_16BPP,
+		.pnmr = PnMR_SPIM_ALP | PnMR_DDDF_16BPP,
 		.edf = PnDDCR4_EDF_NONE,
 	}, {
 		.fourcc = DRM_FORMAT_ARGB1555,
@@ -51,7 +57,7 @@ static const struct rcar_du_format_info rcar_du_format_infos[] = {
 		.fourcc = DRM_FORMAT_XRGB8888,
 		.bpp = 32,
 		.planes = 1,
-		.pnmr = PnMR_SPIM_TP | PnMR_DDDF_16BPP,
+		.pnmr = PnMR_SPIM_ALP | PnMR_DDDF_16BPP,
 		.edf = PnDDCR4_EDF_RGB888,
 	}, {
 		.fourcc = DRM_FORMAT_ARGB8888,
@@ -119,7 +125,7 @@ int rcar_du_dumb_create(struct drm_file *file, struct drm_device *dev,
 	/* The R8A7779 DU requires a 16 pixels pitch alignment as documented,
 	 * but the R8A7790 DU seems to require a 128 bytes pitch alignment.
 	 */
-	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_ALIGN_128B))
+	if (rcar_du_needs(rcdu, RCAR_DU_QUIRK_ALIGN_128B))
 		align = 128;
 	else
 		align = 16 * args->bpp / 8;
@@ -144,10 +150,13 @@ rcar_du_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_ALIGN_128B))
+	if (rcar_du_needs(rcdu, RCAR_DU_QUIRK_ALIGN_128B))
 		align = 128;
+	else if ((format->fourcc == DRM_FORMAT_NV12) ||
+		 (format->fourcc == DRM_FORMAT_NV21))
+		align = 16;
 	else
-		align = 16 * format->bpp / 8;
+		align = (16 * format->bpp / 8) / format->planes;
 
 	if (mode_cmd->pitches[0] & (align - 1) ||
 	    mode_cmd->pitches[0] >= 8192) {
@@ -202,6 +211,17 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 
 	rcdu->num_crtcs = rcdu->info->num_crtcs;
 
+#ifdef CONFIG_DRM_FBDEV_CRTC
+	if (rcdu->pdata->fbdev_crtc) {
+		if (rcdu->pdata->fbdev_crtc > rcdu->num_crtcs) {
+			dev_err(rcdu->dev, "CRTC number of FBDev use error.\n");
+			return -EINVAL;
+		}
+		rcdu->ddev->fbdev_crtc = rcdu->pdata->fbdev_crtc;
+	} else
+		rcdu->ddev->fbdev_crtc = DU_CH_0;
+#endif
+
 	/* Initialize the groups. */
 	num_groups = DIV_ROUND_UP(rcdu->num_crtcs, 2);
 
@@ -240,6 +260,15 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 		if (pdata->type == RCAR_DU_ENCODER_UNUSED)
 			continue;
 
+#if !defined(CONFIG_DRM_ADV7511) && !defined(CONFIG_DRM_ADV7511_MODULE)
+		if (pdata->type == RCAR_DU_ENCODER_HDMI)
+			continue;
+#endif
+#ifndef CONFIG_DRM_RCAR_LVDS
+		if ((pdata->output == RCAR_DU_OUTPUT_LVDS0) ||
+		     (pdata->output == RCAR_DU_OUTPUT_LVDS1))
+			continue;
+#endif
 		if (pdata->output >= RCAR_DU_OUTPUT_MAX ||
 		    route->possible_crtcs == 0) {
 			dev_warn(rcdu->dev,
@@ -248,7 +277,10 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 			continue;
 		}
 
-		rcar_du_encoder_init(rcdu, pdata->type, pdata->output, pdata);
+		ret = rcar_du_encoder_init(rcdu, pdata->type, pdata->output,
+					   pdata);
+		if (ret < 0)
+			return ret;
 	}
 
 	/* Set the possible CRTCs and possible clones. There's always at least
@@ -256,12 +288,12 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 	 * possible clones field.
 	 */
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
-		struct rcar_du_encoder *renc = to_rcar_encoder(encoder);
+		struct rcar_du_encoder *renc = rcar_du_encoder(encoder);
 		const struct rcar_du_output_routing *route =
 			&rcdu->info->routes[renc->output];
 
 		encoder->possible_crtcs = route->possible_crtcs;
-		encoder->possible_clones = (1 << rcdu->pdata->num_encoders) - 1;
+		encoder->possible_clones = route->possible_clones;
 	}
 
 	/* Now that the CRTCs have been initialized register the planes. */
@@ -271,12 +303,18 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 			return ret;
 	}
 
+	if (rcar_du_has(rcdu, RCAR_DU_FEATURE_VSP1_SOURCE)) {
+		ret = rcar_du_vsp1_sources_init(rcdu);
+		if (ret < 0)
+			return ret;
+	}
+
 	drm_kms_helper_poll_init(dev);
 
 	drm_helper_disable_unused_functions(dev);
-
 	fbdev = drm_fbdev_cma_init(dev, 32, dev->mode_config.num_crtc,
-				   dev->mode_config.num_connector);
+				   dev->mode_config.num_connector,
+				   rcar_du_fbdev_pan ? 3 : 1);
 	if (IS_ERR(fbdev))
 		return PTR_ERR(fbdev);
 
@@ -285,6 +323,10 @@ int rcar_du_modeset_init(struct rcar_du_device *rcdu)
 #endif
 
 	rcdu->fbdev = fbdev;
+
+#ifdef CONFIG_DRM_FBDEV_CRTC
+	dev_info(dev->dev, "CRTC[%d] used by FBDev\n", rcdu->ddev->fbdev_crtc);
+#endif
 
 	return 0;
 }

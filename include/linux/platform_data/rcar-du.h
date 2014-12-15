@@ -1,7 +1,7 @@
 /*
  * rcar_du.h  --  R-Car Display Unit DRM driver
  *
- * Copyright (C) 2013 Renesas Corporation
+ * Copyright (C) 2013-2014 Renesas Electronics Corporation
  *
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  *
@@ -22,6 +22,7 @@ enum rcar_du_output {
 	RCAR_DU_OUTPUT_LVDS0,
 	RCAR_DU_OUTPUT_LVDS1,
 	RCAR_DU_OUTPUT_TCON,
+	RCAR_DU_OUTPUT_HDMI,
 	RCAR_DU_OUTPUT_MAX,
 };
 
@@ -30,6 +31,7 @@ enum rcar_du_encoder_type {
 	RCAR_DU_ENCODER_NONE,
 	RCAR_DU_ENCODER_VGA,
 	RCAR_DU_ENCODER_LVDS,
+	RCAR_DU_ENCODER_HDMI,
 };
 
 struct rcar_du_panel_data {
@@ -43,6 +45,10 @@ struct rcar_du_connector_lvds_data {
 };
 
 struct rcar_du_connector_vga_data {
+	/* TODO: Add DDC information for EDID retrieval */
+};
+
+struct rcar_du_connector_hdmi_data {
 	/* TODO: Add DDC information for EDID retrieval */
 };
 
@@ -63,12 +69,26 @@ struct rcar_du_encoder_data {
 	union {
 		struct rcar_du_connector_lvds_data lvds;
 		struct rcar_du_connector_vga_data vga;
+		struct rcar_du_connector_hdmi_data hdmi;
 	} connector;
+};
+
+struct rcar_du_crtc_data {
+	unsigned int exclk;
+	unsigned int init_conn_type;
 };
 
 struct rcar_du_platform_data {
 	struct rcar_du_encoder_data *encoders;
 	unsigned int num_encoders;
+	struct rcar_du_crtc_data *crtcs;
+	unsigned int num_crtcs;
+#ifdef CONFIG_DRM_FBDEV_CRTC
+	unsigned int fbdev_crtc;
+#endif
+	int (*backlight_on)(void);
+	int (*backlight_off)(void);
+	unsigned int i2c_ch;
 };
 
 #endif /* __RCAR_DU_H__ */
