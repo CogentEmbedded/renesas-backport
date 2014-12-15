@@ -278,6 +278,10 @@ REGULATOR
   devm_regulator_put()
   devm_regulator_bulk_get()
 
+MEM
+  devm_kasprintf()
+  devm_kvasprintf()
+
 CLOCK
   devm_clk_get()
   devm_clk_put()
