@@ -99,7 +99,7 @@ struct mvebu_pcie_port;
 struct mvebu_pcie {
 	struct platform_device *pdev;
 	struct mvebu_pcie_port *ports;
-	struct msi_chip *msi;
+	struct msi_controller *msi;
 	struct resource io;
 	char io_name[30];
 	struct resource realio;
@@ -1082,7 +1082,6 @@ MODULE_DEVICE_TABLE(of, mvebu_pcie_of_match_table);
 
 static struct platform_driver mvebu_pcie_driver = {
 	.driver = {
-		.owner = THIS_MODULE,
 		.name = "mvebu-pcie",
 		.of_match_table = mvebu_pcie_of_match_table,
 		/* driver unloading/unbinding currently not supported */

@@ -152,10 +152,10 @@ static int dw_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 
 static struct irq_chip dw_msi_irq_chip = {
 	.name = "PCI-MSI",
-	.irq_enable = unmask_msi_irq,
-	.irq_disable = mask_msi_irq,
-	.irq_mask = mask_msi_irq,
-	.irq_unmask = unmask_msi_irq,
+	.irq_enable = pci_msi_unmask_irq,
+	.irq_disable = pci_msi_mask_irq,
+	.irq_mask = pci_msi_mask_irq,
+	.irq_unmask = pci_msi_unmask_irq,
 };
 
 /* MSI int handler */
@@ -276,7 +276,7 @@ no_valid_irq:
 	return -ENOSPC;
 }
 
-static int dw_msi_setup_irq(struct msi_chip *chip, struct pci_dev *pdev,
+static int dw_msi_setup_irq(struct msi_controller *chip, struct pci_dev *pdev,
 			struct msi_desc *desc)
 {
 	int irq, pos;
@@ -298,12 +298,12 @@ static int dw_msi_setup_irq(struct msi_chip *chip, struct pci_dev *pdev,
 	else
 		msg.data = pos;
 
-	write_msi_msg(irq, &msg);
+	pci_write_msi_msg(irq, &msg);
 
 	return 0;
 }
 
-static void dw_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
+static void dw_msi_teardown_irq(struct msi_controller *chip, unsigned int irq)
 {
 	struct irq_data *data = irq_get_irq_data(irq);
 	struct msi_desc *msi = irq_data_get_msi(data);
@@ -312,7 +312,7 @@ static void dw_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 	clear_irq_range(pp, irq, 1, data->hwirq);
 }
 
-static struct msi_chip dw_pcie_msi_chip = {
+static struct msi_controller dw_pcie_msi_chip = {
 	.setup_irq = dw_msi_setup_irq,
 	.teardown_irq = dw_msi_teardown_irq,
 };
