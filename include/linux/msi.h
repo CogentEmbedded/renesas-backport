@@ -13,14 +13,8 @@ struct msi_msg {
 /* Helper functions */
 struct irq_data;
 struct msi_desc;
-void mask_msi_irq(struct irq_data *data);
-void unmask_msi_irq(struct irq_data *data);
-void __read_msi_msg(struct msi_desc *entry, struct msi_msg *msg);
 void __get_cached_msi_msg(struct msi_desc *entry, struct msi_msg *msg);
-void __write_msi_msg(struct msi_desc *entry, struct msi_msg *msg);
-void read_msi_msg(unsigned int irq, struct msi_msg *msg);
 void get_cached_msi_msg(unsigned int irq, struct msi_msg *msg);
-void write_msi_msg(unsigned int irq, struct msi_msg *msg);
 
 struct msi_desc {
 	struct {
@@ -48,6 +42,33 @@ struct msi_desc {
 	struct msi_msg msg;
 };
 
+void __pci_read_msi_msg(struct msi_desc *entry, struct msi_msg *msg);
+void __pci_write_msi_msg(struct msi_desc *entry, struct msi_msg *msg);
+void pci_write_msi_msg(unsigned int irq, struct msi_msg *msg);
+
+u32 __pci_msix_desc_mask_irq(struct msi_desc *desc, u32 flag);
+u32 __pci_msi_desc_mask_irq(struct msi_desc *desc, u32 mask, u32 flag);
+void pci_msi_mask_irq(struct irq_data *data);
+void pci_msi_unmask_irq(struct irq_data *data);
+
+/* Conversion helpers. Should be removed after merging */
+static inline void __write_msi_msg(struct msi_desc *entry, struct msi_msg *msg)
+{
+	__pci_write_msi_msg(entry, msg);
+}
+static inline void write_msi_msg(int irq, struct msi_msg *msg)
+{
+	pci_write_msi_msg(irq, msg);
+}
+static inline void mask_msi_irq(struct irq_data *data)
+{
+	pci_msi_mask_irq(data);
+}
+static inline void unmask_msi_irq(struct irq_data *data)
+{
+	pci_msi_unmask_irq(data);
+}
+
 /*
  * The arch hooks to setup up msi irqs. Those functions are
  * implemented as weak symbols so that they /can/ be overriden by
@@ -61,18 +82,16 @@ void arch_restore_msi_irqs(struct pci_dev *dev);
 
 void default_teardown_msi_irqs(struct pci_dev *dev);
 void default_restore_msi_irqs(struct pci_dev *dev);
-u32 default_msi_mask_irq(struct msi_desc *desc, u32 mask, u32 flag);
-u32 default_msix_mask_irq(struct msi_desc *desc, u32 flag);
 
-struct msi_chip {
+struct msi_controller {
 	struct module *owner;
 	struct device *dev;
 	struct device_node *of_node;
 	struct list_head list;
 
-	int (*setup_irq)(struct msi_chip *chip, struct pci_dev *dev,
+	int (*setup_irq)(struct msi_controller *chip, struct pci_dev *dev,
 			 struct msi_desc *desc);
-	void (*teardown_irq)(struct msi_chip *chip, unsigned int irq);
+	void (*teardown_irq)(struct msi_controller *chip, unsigned int irq);
 };
 
 #endif /* LINUX_MSI_H */
