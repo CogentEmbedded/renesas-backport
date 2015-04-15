@@ -263,7 +263,7 @@ static int rcar_i2c_clock_calculate(struct rcar_i2c_priv *priv,
 	 */
 	rate = clk_get_rate(priv->clk);
 	cdf = rate / 20000000;
-	if (cdf >= 1 << cdf_width) {
+	if (cdf >= 1U << cdf_width) {
 		dev_err(dev, "Input clock %lu too high\n", rate);
 		return -EIO;
 	}
@@ -347,15 +347,6 @@ static int rcar_i2c_recv(struct rcar_i2c_priv *priv)
 
 static int rcar_i2c_send(struct rcar_i2c_priv *priv)
 {
-	int ret;
-
-	/*
-	 * It should check bus status when send case
-	 */
-	ret = rcar_i2c_bus_barrier(priv);
-	if (ret < 0)
-		return ret;
-
 	rcar_i2c_set_addr(priv, 0);
 	rcar_i2c_status_clear(priv);
 	rcar_i2c_bus_phase(priv, RCAR_BUS_PHASE_ADDR);
@@ -483,6 +474,9 @@ static irqreturn_t rcar_i2c_irq(int irq, void *ptr)
 
 	msr = rcar_i2c_status_get(priv);
 
+	/* Only handle interrupts that are currently enabled */
+	msr &= rcar_i2c_read(priv, ICMIER);
+
 	/*
 	 * Arbitration lost
 	 */
@@ -498,15 +492,6 @@ static irqreturn_t rcar_i2c_irq(int irq, void *ptr)
 	}
 
 	/*
-	 * Stop
-	 */
-	if (msr & MST) {
-		dev_dbg(dev, "Stop\n");
-		rcar_i2c_flags_set(priv, ID_DONE);
-		goto out;
-	}
-
-	/*
 	 * Nack
 	 */
 	if (msr & MNR) {
@@ -516,6 +501,15 @@ static irqreturn_t rcar_i2c_irq(int irq, void *ptr)
 		rcar_i2c_bus_phase(priv, RCAR_BUS_PHASE_STOP);
 		rcar_i2c_irq_mask(priv, RCAR_IRQ_OPEN_FOR_STOP);
 		rcar_i2c_flags_set(priv, ID_NACK);
+		goto out;
+	}
+
+	/*
+	 * Stop
+	 */
+	if (msr & MST) {
+		dev_dbg(dev, "Stop\n");
+		rcar_i2c_flags_set(priv, ID_DONE);
 		goto out;
 	}
 
@@ -560,8 +554,17 @@ static int rcar_i2c_master_xfer(struct i2c_adapter *adap,
 	spin_unlock_irqrestore(&priv->lock, flags);
 	/*-------------- spin unlock -----------------*/
 
-	ret = -EINVAL;
+	ret = rcar_i2c_bus_barrier(priv);
+	if (ret < 0)
+		goto out;
+
 	for (i = 0; i < num; i++) {
+		/* This HW can't send STOP after address phase */
+		if (msgs[i].len == 0) {
+			ret = -EOPNOTSUPP;
+			break;
+		}
+
 		/*-------------- spin lock -----------------*/
 		spin_lock_irqsave(&priv->lock, flags);
 
@@ -615,7 +618,7 @@ static int rcar_i2c_master_xfer(struct i2c_adapter *adap,
 
 		ret = i + 1; /* The number of transfer */
 	}
-
+out:
 	pm_runtime_put(dev);
 
 	if (ret < 0 && ret != -ENXIO)
@@ -626,7 +629,8 @@ static int rcar_i2c_master_xfer(struct i2c_adapter *adap,
 
 static u32 rcar_i2c_func(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+	/* This HW can't do SMBUS_QUICK and NOSTART */
+	return I2C_FUNC_I2C | (I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK);
 }
 
 static const struct i2c_algorithm rcar_i2c_algo = {
