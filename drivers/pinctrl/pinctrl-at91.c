@@ -1088,10 +1088,9 @@ static int at91_pinctrl_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, info);
 	info->pctl = pinctrl_register(&at91_pinctrl_desc, &pdev->dev, info);
 
-	if (!info->pctl) {
+	if (IS_ERR(info->pctl)) {
 		dev_err(&pdev->dev, "could not register AT91 pinctrl driver\n");
-		ret = -EINVAL;
-		goto err;
+		return PTR_ERR(info->pctl);
 	}
 
 	/* We will handle a range of GPIO pins */
@@ -1101,9 +1100,6 @@ static int at91_pinctrl_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "initialized AT91 pinctrl driver\n");
 
 	return 0;
-
-err:
-	return ret;
 }
 
 static int at91_pinctrl_remove(struct platform_device *pdev)
